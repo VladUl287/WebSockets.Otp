@@ -16,7 +16,6 @@ public sealed class JsonMessageSerializer(JsonSerializerOptions options) : IMess
     private static ReadOnlySpan<byte> Key => "key"u8;
     private static ReadOnlySpan<byte> Id => "id"u8;
     private static ReadOnlySpan<byte> Value => "value"u8;
-    private static ReadOnlySpan<byte> MessageType => "type"u8;
 
     public MessageHeaders ReadHeaders(ReadOnlyMemory<byte> data)
     {
@@ -75,14 +74,12 @@ public sealed class JsonMessageSerializer(JsonSerializerOptions options) : IMess
 
         writer.WriteStartObject();
         if (!string.IsNullOrEmpty(envelope.Key))
-            writer.WriteString(Key, envelope.Key);
+            writer.WriteString("key"u8, envelope.Key);
 
         if (envelope.Id != default)
-            writer.WriteNumber(Id, envelope.Id);
+            writer.WriteNumber("id"u8, envelope.Id);
 
-        writer.WriteNumber(MessageType, (int)envelope.Type);
-
-        writer.WritePropertyName(Value);
+        writer.WritePropertyName(envelope.Type == MessageType.Error ? "error"u8 : "value"u8);
 
         JsonSerializer.Serialize(writer, envelope.Value, options);
         writer.WriteEndObject();
