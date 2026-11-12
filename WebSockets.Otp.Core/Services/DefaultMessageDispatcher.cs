@@ -1,7 +1,9 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using WebSockets.Otp.Abstractions.Connections;
 using WebSockets.Otp.Abstractions.Contracts;
 using WebSockets.Otp.Abstractions.Endpoints;
+using WebSockets.Otp.Abstractions.Options;
 using WebSockets.Otp.Abstractions.Serializers;
 using WebSockets.Otp.Abstractions.Transport;
 using WebSockets.Otp.Abstractions.Utils;
@@ -11,7 +13,7 @@ namespace WebSockets.Otp.Core.Services;
 
 public class DefaultMessageDispatcher(
     IServiceScopeFactory scopeFactory, IContextFactory contextFactory, ITrieResolver<WsEndpointInfo> endpointResolver,
-    ILogger<DefaultMessageDispatcher> logger) : IMessageDispatcher
+    IWsConnectionManager manager, ILogger<DefaultMessageDispatcher> logger) : IMessageDispatcher
 {
     public async Task DispatchMessage(IGlobalContext context, IMessageSerializer serializer, IMessageBuffer payload, CancellationToken token)
     {
@@ -37,6 +39,17 @@ public class DefaultMessageDispatcher(
             if (result.IsError)
             {
                 logger.AuthorizationFailed(result.Error);
+
+                if (messageHeader.Id != default)
+                {
+                    var envelope = new MessageEnvelope<string>
+                    {
+                        Id = messageHeader.Id,
+                        Value = result.Error,
+                        Type = MessageType.Error
+                    };
+                    await manager.Send(context.Connection.Id, envelope, token);
+                }
                 return;
             }
         }
