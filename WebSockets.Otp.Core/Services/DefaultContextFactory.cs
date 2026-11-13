@@ -11,6 +11,6 @@ public sealed class DefaultContextFactory(IWsConnectionManager manager) : IConte
     public IGlobalContext CreateGlobal(IWsConnection connection, HttpContext context, WebSocket socket) => 
         new GlobalContext(context, socket, connection, manager);
 
-    public IEndpointContext Create(uint? correlationId, IGlobalContext global, ReadOnlyMemory<byte> data, CancellationToken token) => 
+    public IEndpointContext Create(uint correlationId, IGlobalContext global, ReadOnlyMemory<byte> data, CancellationToken token) => 
         new EndpointContext(correlationId, global, manager, data, token);
 }

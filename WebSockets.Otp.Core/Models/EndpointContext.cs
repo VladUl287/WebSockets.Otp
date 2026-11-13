@@ -7,7 +7,7 @@ using WebSockets.Otp.Abstractions.Endpoints;
 namespace WebSockets.Otp.Core.Models;
 
 public sealed class EndpointContext(
-    uint? correlationId,
+    uint correlationId,
     IGlobalContext context,
     IWsConnectionManager manager,
     ReadOnlyMemory<byte> payload,
@@ -16,7 +16,7 @@ public sealed class EndpointContext(
     public IWsConnection Connection => context.Connection;
     public HttpContext Context => context.Context;
     public WebSocket Socket => context.Socket;
-    public uint? CorrelationId => correlationId;
+    public uint CorrelationId => correlationId;
     public IWsConnectionManager Manager => manager;
     public ReadOnlyMemory<byte> Payload => payload;
     public CancellationToken Cancellation => token;

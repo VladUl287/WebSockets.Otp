@@ -13,10 +13,19 @@ public sealed class JsonMessageSerializer(JsonSerializerOptions options) : IMess
 
     public T? Deserialize<T>(ReadOnlyMemory<byte> data) => JsonSerializer.Deserialize<T>(data.Span, options);
 
-    private static ReadOnlySpan<byte> Key => "key"u8;
-    private static ReadOnlySpan<byte> Id => "id"u8;
-    private static ReadOnlySpan<byte> Value => "value"u8;
-    private static ReadOnlySpan<byte> Error => "error"u8;
+    private static readonly JsonWriterOptions WriterOptions = new() { SkipValidation = true };
+    public void SerializeMessage(WsMessage data, IBufferWriter<byte> buffer)
+    {
+        using var writer = new Utf8JsonWriter(buffer, WriterOptions);
+
+        writer.WriteStartObject();
+        writer.WriteNumber("type", data.Type.Value);
+
+        data.WritePayload(writer, options);
+
+        writer.WriteEndObject();
+        writer.Flush();
+    }
 
     public MessageHeaders ReadHeaders(ReadOnlyMemory<byte> data)
     {
@@ -35,7 +44,7 @@ public sealed class JsonMessageSerializer(JsonSerializerOptions options) : IMess
                     if (reader.CurrentDepth != 1)
                         break;
 
-                    if (reader.ValueTextEquals(Key))
+                    if (reader.ValueTextEquals("key"))
                     {
                         reader.Read();
                         var start = reader.TokenStartIndex;
@@ -43,7 +52,7 @@ public sealed class JsonMessageSerializer(JsonSerializerOptions options) : IMess
                         var end = reader.BytesConsumed;
                         key = data[((int)start + 1)..((int)end - 1)];
                     }
-                    else if (reader.ValueTextEquals(Id))
+                    else if (reader.ValueTextEquals("id"))
                     {
                         reader.Read();
                         var start = reader.TokenStartIndex;
@@ -51,7 +60,7 @@ public sealed class JsonMessageSerializer(JsonSerializerOptions options) : IMess
                         var end = reader.BytesConsumed;
                         id = uint.Parse(dataSpan[(int)start..(int)end]);
                     }
-                    else if (reader.ValueTextEquals(Value))
+                    else if (reader.ValueTextEquals("value"))
                     {
                         reader.Read();
                         var start = reader.TokenStartIndex;
@@ -64,31 +73,5 @@ public sealed class JsonMessageSerializer(JsonSerializerOptions options) : IMess
         }
 
         return new(id, key, value);
-    }
-
-    private static readonly JsonWriterOptions WriterOptions = new() { SkipValidation = true };
-    public ReadOnlyMemory<byte> SerializeToMessage<T>(MessageEnvelope<T> envelope)
-    {
-        var buffer = new ArrayBufferWriter<byte>();
-        SerializeToMessage(envelope, buffer);
-        return buffer.WrittenMemory;
-    }
-
-    public void SerializeToMessage<T>(MessageEnvelope<T> envelope, IBufferWriter<byte> buffer)
-    {
-        using var writer = new Utf8JsonWriter(buffer, WriterOptions);
-
-        writer.WriteStartObject();
-        if (!string.IsNullOrEmpty(envelope.Key))
-            writer.WriteString(Key, envelope.Key);
-
-        if (envelope.Id != default)
-            writer.WriteNumber(Id, envelope.Id);
-
-        writer.WritePropertyName(envelope.Type == MessageType.Error ? Error : Value);
-
-        JsonSerializer.Serialize(writer, envelope.Value, options);
-        writer.WriteEndObject();
-        writer.Flush();
     }
 }

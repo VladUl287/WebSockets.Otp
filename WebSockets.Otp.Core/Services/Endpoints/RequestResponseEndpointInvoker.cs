@@ -24,21 +24,12 @@ public sealed class RequestResponseEndpointInvoker<TRequest, TResponse> : IEndpo
         try
         {
             var response = await typedEndpoint.HandleAsync(request, context);
-            var envelope = new MessageEnvelope<TResponse>
-            {
-                Id = context.CorrelationId ?? 0,
-                Value = response
-            };
+            var envelope = new ResponseMessage<TResponse>(context.CorrelationId, response);
             await context.Manager.Send(connection.Id, envelope, context.Cancellation);
         }
         catch (Exception ex)
         {
-            var envelope = new MessageEnvelope<string>
-            {
-                Id = context.CorrelationId ?? 0,
-                Value = ex.Message,
-                Type = MessageType.Error
-            };
+            var envelope = new ErrorMessage(context.CorrelationId, ex.Message);
             await context.Manager.Send(connection.Id, envelope, context.Cancellation);
         }
     }

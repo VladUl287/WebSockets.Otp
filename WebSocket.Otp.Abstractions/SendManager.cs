@@ -30,10 +30,10 @@ public sealed class SendManager(IWsConnectionManager manager)
         return this;
     }
 
-    public async ValueTask SendAsync<TResponse>(string key, TResponse data, CancellationToken token = default)
-        where TResponse : notnull
+    public async ValueTask SendAsync<TData>(string key, TData data, CancellationToken token = default)
+        where TData : notnull
     {
-        var envelope = new MessageEnvelope<TResponse>(key, data);
+        var envelope = new EventMessage<TData>(key, data);
 
         try
         {

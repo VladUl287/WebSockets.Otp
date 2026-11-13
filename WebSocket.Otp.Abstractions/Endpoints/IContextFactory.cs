@@ -8,5 +8,5 @@ public interface IContextFactory
 {
     IGlobalContext CreateGlobal(IWsConnection connection, HttpContext context, WebSocket socket);
 
-    IEndpointContext Create(uint? correlationId, IGlobalContext global, ReadOnlyMemory<byte> data, CancellationToken token);
+    IEndpointContext Create(uint correlationId, IGlobalContext global, ReadOnlyMemory<byte> data, CancellationToken token);
 }

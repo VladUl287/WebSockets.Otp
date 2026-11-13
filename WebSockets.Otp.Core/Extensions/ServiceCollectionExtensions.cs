@@ -77,6 +77,12 @@ public static class ServiceCollectionExtensions
             var policy = new NativeChunkedBufferPolicy(options);
             return provider.Create(policy);
         });
+        services.AddSingleton(serviceProvider =>
+        {
+            var provider = serviceProvider.GetRequiredService<ObjectPoolProvider>();
+            var policy = new BufferWriterPolicy(options);
+            return provider.Create(policy);
+        });
         services.AddSingleton<IMessageEnumerator, MessageEnumerator>();
         services.AddSingleton<IMessageProcessor, ParallelMessageProcessor>();
         return services;

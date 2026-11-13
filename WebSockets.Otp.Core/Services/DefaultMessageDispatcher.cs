@@ -42,12 +42,7 @@ public class DefaultMessageDispatcher(
 
                 if (messageHeader.Id != default)
                 {
-                    var envelope = new MessageEnvelope<string>
-                    {
-                        Id = messageHeader.Id,
-                        Value = result.Error,
-                        Type = MessageType.Error
-                    };
+                    var envelope = new ErrorMessage(messageHeader.Id, result.Error);
                     await manager.Send(context.Connection.Id, envelope, token);
                 }
                 return;

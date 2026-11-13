@@ -9,9 +9,7 @@ public interface IMessageSerializer
     string Protocol { get; }
     WebSocketMessageType Type { get; }
 
+    MessageHeaders ReadHeaders(ReadOnlyMemory<byte> message);
+    void SerializeMessage(WsMessage data, IBufferWriter<byte> buffer);
     T? Deserialize<T>(ReadOnlyMemory<byte> data);
-
-    MessageHeaders ReadHeaders(ReadOnlyMemory<byte> data);
-    ReadOnlyMemory<byte> SerializeToMessage<T>(MessageEnvelope<T> data);
-    void SerializeToMessage<T>(MessageEnvelope<T> data, IBufferWriter<byte> buffer);
 }
