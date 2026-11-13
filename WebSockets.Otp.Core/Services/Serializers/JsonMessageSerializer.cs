@@ -38,37 +38,43 @@ public sealed class JsonMessageSerializer(JsonSerializerOptions options) : IMess
 
         while (reader.Read())
         {
-            switch (reader.TokenType)
-            {
-                case JsonTokenType.PropertyName:
-                    if (reader.CurrentDepth != 1)
-                        break;
+            if (reader.TokenType != JsonTokenType.PropertyName || reader.CurrentDepth != 1)
+                continue;
 
-                    if (reader.ValueTextEquals("key"))
-                    {
-                        reader.Read();
-                        var start = reader.TokenStartIndex;
-                        reader.Skip();
-                        var end = reader.BytesConsumed;
-                        key = data[((int)start + 1)..((int)end - 1)];
-                    }
-                    else if (reader.ValueTextEquals("id"))
-                    {
-                        reader.Read();
-                        var start = reader.TokenStartIndex;
-                        reader.Skip();
-                        var end = reader.BytesConsumed;
-                        id = uint.Parse(dataSpan[(int)start..(int)end]);
-                    }
-                    else if (reader.ValueTextEquals("value"))
-                    {
-                        reader.Read();
-                        var start = reader.TokenStartIndex;
-                        reader.Skip();
-                        var end = reader.BytesConsumed;
-                        value = data[(int)start..(int)end];
-                    }
-                    break;
+            if (reader.ValueTextEquals("id"u8))
+            {
+                reader.Read();
+
+                if (reader.TokenType != JsonTokenType.Number)
+                    throw new FormatException("Header 'id' must be a number.");
+
+                id = reader.GetUInt32();
+            }
+            else if (reader.ValueTextEquals("key"u8))
+            {
+                reader.Read();
+
+                var start = reader.TokenStartIndex;
+
+                if (reader.TokenType != JsonTokenType.String)
+                    throw new FormatException("Header 'key' must be a string.");
+
+                reader.Skip();
+                var end = reader.BytesConsumed;
+
+                key = data[((int)start + 1)..((int)end - 1)];
+            }
+            else if (reader.ValueTextEquals("value"u8))
+            {
+                var start = (int)reader.TokenStartIndex;
+
+                reader.Skip();
+
+                value = data[start..(int)reader.BytesConsumed];
+            }
+            else
+            {
+                reader.Skip();
             }
         }
 
