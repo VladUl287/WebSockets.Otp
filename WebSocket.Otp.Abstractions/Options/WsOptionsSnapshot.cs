@@ -13,9 +13,9 @@ public sealed class WsOptionsSnapshot(WsOptions options)
     public int MaxDegreeOfParallelism { get; init; } = options.MaxDegreeOfParallelism;
     public TaskScheduler? TaskScheduler { get; init; } = options.TaskScheduler;
 
-    public int MaxMessageSize { get; init; } = options.MaxMessageSize;
-    public int ReceiveBufferSize { get; init; } = options.ReceiveBufferSize;
-    public bool ShrinkBuffers { get; init; } = options.ShrinkBuffers;
+    public int DefaultBufferSize { get; init; } = options.DefaultBufferSize;
+    public int MaxBufferSize { get; init; } = options.MaxBufferSize;
+    public bool ShrinkBuffer { get; init; } = options.ShrinkBuffer;
 
     public Func<IGlobalContext, Task>? OnConnected { get; init; } = options.OnConnected;
     public Func<IGlobalContext, Task>? OnDisconnected { get; init; } = options.OnDisconnected;

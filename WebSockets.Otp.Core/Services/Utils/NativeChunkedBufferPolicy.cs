@@ -6,13 +6,13 @@ namespace WebSockets.Otp.Core.Services.Utils;
 
 public sealed class NativeChunkedBufferPolicy(WsOptions options) : IPooledObjectPolicy<IMessageBuffer>
 {
-    public IMessageBuffer Create() => new NativeChunkedBuffer(options.ReceiveBufferSize);
+    public IMessageBuffer Create() => new NativeChunkedBuffer(options.DefaultBufferSize);
 
     public bool Return(IMessageBuffer obj)
     {
         obj.SetLength(0);
 
-        if (options.ShrinkBuffers)
+        if (options.ShrinkBuffer)
             obj.Shrink();
 
         return true;

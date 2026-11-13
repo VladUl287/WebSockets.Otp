@@ -39,7 +39,7 @@ public class ParallelMessageProcessorTests
         _options = new WsOptionsSnapshot(new WsOptions
         {
             MaxDegreeOfParallelism = Environment.ProcessorCount,
-            ShrinkBuffers = true,
+            ShrinkBuffer = true,
             TaskScheduler = TaskScheduler.Default
         });
     }

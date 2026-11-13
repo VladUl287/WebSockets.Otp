@@ -23,8 +23,8 @@ public class MessageEnumeratorTests
         _mockMessageBuffer = new Mock<IMessageBuffer>();
         _config = new WsOptionsSnapshot(new WsOptions
         {
-            ReceiveBufferSize = 1024,
-            MaxMessageSize = 8192
+            DefaultBufferSize = 1024,
+            MaxBufferSize = 8192
         });
         _enumerator = new MessageEnumerator(_mockBufferPool.Object);
     }
@@ -106,7 +106,7 @@ public class MessageEnumeratorTests
     {
         // Arrange
         var cancellationToken = CancellationToken.None;
-        var largeData = new byte[_config.MaxMessageSize + 1];
+        var largeData = new byte[_config.MaxBufferSize + 1];
 
         var messageBuffer = new TestMessageBuffer();
 
@@ -118,8 +118,8 @@ public class MessageEnumeratorTests
                 cancellationToken))
             .Callback<ArraySegment<byte>, CancellationToken>((buffer, _) =>
             {
-                messageBuffer.Length += _config.ReceiveBufferSize;
-                largeData.AsSpan(0, _config.ReceiveBufferSize).CopyTo(buffer.AsSpan());
+                messageBuffer.Length += _config.DefaultBufferSize;
+                largeData.AsSpan(0, _config.DefaultBufferSize).CopyTo(buffer.AsSpan());
             })
             .ReturnsAsync(new WebSocketReceiveResult(
                 largeData.Length,
@@ -136,7 +136,7 @@ public class MessageEnumeratorTests
             { }
         });
 
-        Assert.Contains(_config.MaxMessageSize.ToString(), exception.Message);
+        Assert.Contains(_config.MaxBufferSize.ToString(), exception.Message);
     }
 
     [Fact]

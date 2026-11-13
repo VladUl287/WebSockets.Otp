@@ -11,7 +11,7 @@ public sealed class MessageEnumerator(ObjectPool<IMessageBuffer> bufferPool) : I
     public async IAsyncEnumerable<IMessageBuffer> EnumerateAsync(
          WebSocket socket, WsOptionsSnapshot config, [EnumeratorCancellation] CancellationToken token)
     {
-        var receiveBuffer = GC.AllocateUninitializedArray<byte>(config.ReceiveBufferSize);
+        var receiveBuffer = GC.AllocateUninitializedArray<byte>(config.DefaultBufferSize);
         var messageBuffer = bufferPool.Get();
 
         while (!token.IsCancellationRequested)
@@ -21,8 +21,8 @@ public sealed class MessageEnumerator(ObjectPool<IMessageBuffer> bufferPool) : I
             if (receiveResult is { MessageType: WebSocketMessageType.Close })
                 break;
 
-            if (receiveResult.Count > config.MaxMessageSize - messageBuffer.Length)
-                throw new OutOfMemoryException($"Message exceed maximum message size '{config.MaxMessageSize}'.");
+            if (receiveResult.Count > config.MaxBufferSize - messageBuffer.Length)
+                throw new OutOfMemoryException($"Message exceed maximum message size '{config.MaxBufferSize}'.");
 
             messageBuffer.Write(receiveBuffer.AsSpan(0, receiveResult.Count));
 

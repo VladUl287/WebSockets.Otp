@@ -10,12 +10,12 @@ public sealed class WsOptions
 
     public WebSocketOptions WebSocketOptions { get; set; } = new();
 
-    public int MaxDegreeOfParallelism { get; set; } = Environment.ProcessorCount;
+    public int MaxDegreeOfParallelism { get; set; } = Environment.ProcessorCount * 10;
     public TaskScheduler? TaskScheduler { get; set; }
 
-    public int MaxMessageSize { get; set; } = 4 * 1024 * 1024; // 4MB
-    public int ReceiveBufferSize { get; set; } = 4 * 1024; // 4KB
-    public bool ShrinkBuffers { get; set; } = true;
+    public int DefaultBufferSize { get; set; } = 4 * 1024; // 4KB
+    public int MaxBufferSize { get; set; } = 4 * 1024 * 1024; // 4MB
+    public bool ShrinkBuffer { get; set; } = true;
 
     public Func<IGlobalContext, Task>? OnConnected { get; set; }
     public Func<IGlobalContext, Task>? OnDisconnected { get; set; }
