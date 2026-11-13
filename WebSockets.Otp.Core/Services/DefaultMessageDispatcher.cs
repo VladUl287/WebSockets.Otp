@@ -1,5 +1,6 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using System.Diagnostics.CodeAnalysis;
 using WebSockets.Otp.Abstractions.Connections;
 using WebSockets.Otp.Abstractions.Contracts;
 using WebSockets.Otp.Abstractions.Endpoints;
@@ -17,43 +18,66 @@ public class DefaultMessageDispatcher(
 {
     public async Task DispatchMessage(IGlobalContext context, IMessageSerializer serializer, IMessageBuffer payload, CancellationToken token)
     {
-        var payloadMem = payload.Memory;
+        var messageHeader = serializer.ReadHeaders(payload.Memory);
 
-        var messageHeader = serializer.ReadHeaders(payloadMem);
-
-        var keySlice = messageHeader.Key;
-
-        if (keySlice.IsEmpty || !endpointResolver.TryResolve(keySlice, out var endpointInfo))
-        {
-            logger.KeyFieldMissing();
+        if (!TryResolveEndpoint(messageHeader, out var endpointInfo))
             return;
-        }
 
         await using var scope = scopeFactory.CreateAsyncScope();
 
-        if (endpointInfo.Endpoint is not null)
+        if (!await TryAuthorizeAsync(scope.ServiceProvider, context, messageHeader, endpointInfo, token))
+            return;
+
+        await InvokeEndpointAsync(scope.ServiceProvider, context, messageHeader, endpointInfo, token);
+    }
+
+    private bool TryResolveEndpoint(MessageHeaders messageHeader, [NotNullWhen(true)] out WsEndpointInfo? endpointInfo)
+    {
+        endpointInfo = null;
+
+        var keySlice = messageHeader.Key;
+
+        if (keySlice.IsEmpty || !endpointResolver.TryResolve(keySlice, out endpointInfo))
         {
-            var authorizer = scope.ServiceProvider.GetRequiredService<IEndpointAuthorizer>();
-            var result = await authorizer.AuthorizeAsync(context.Context, endpointInfo);
-
-            if (result.IsError)
-            {
-                logger.AuthorizationFailed(result.Error);
-
-                if (messageHeader.Id != default)
-                {
-                    var envelope = new ErrorMessage(messageHeader.Id, result.Error);
-                    await manager.Send(context.Connection.Id, envelope, token);
-                }
-                return;
-            }
+            logger.KeyFieldMissing();
+            return false;
         }
 
-        var endpointType = endpointInfo.EndpointType;
-        var endpoint = scope.ServiceProvider.GetRequiredService(endpointType);
+        return true;
+    }
 
+    private async Task<bool> TryAuthorizeAsync(
+        IServiceProvider services, IGlobalContext context, MessageHeaders messageHeader,
+        WsEndpointInfo endpointInfo, CancellationToken token)
+    {
+        if (endpointInfo.Endpoint is null)
+            return true;
+
+        var authorizer = services.GetRequiredService<IEndpointAuthorizer>();
+        var result = await authorizer.AuthorizeAsync(context.Context, endpointInfo);
+
+        if (!result.IsError)
+        {
+            return true;
+        }
+
+        logger.AuthorizationFailed(result.Error);
+
+        if (messageHeader.Id != default)
+        {
+            var envelope = new ErrorMessage(messageHeader.Id, result.Error);
+            await manager.Send(context.Connection.Id, envelope, token);
+        }
+
+        return false;
+    }
+
+    private async Task InvokeEndpointAsync(
+        IServiceProvider services, IGlobalContext context, MessageHeaders messageHeader,
+        WsEndpointInfo endpointInfo, CancellationToken token)
+    {
+        var endpoint = services.GetRequiredService(endpointInfo.EndpointType);
         var endpointContext = contextFactory.Create(messageHeader.Id, context, messageHeader.Value, token);
-
         await endpointInfo.Invoker.Invoke(endpoint, endpointContext);
     }
 }
