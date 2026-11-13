@@ -67,10 +67,15 @@ public sealed class JsonMessageSerializer(JsonSerializerOptions options) : IMess
     }
 
     private static readonly JsonWriterOptions WriterOptions = new() { SkipValidation = true };
-
     public ReadOnlyMemory<byte> SerializeToMessage<T>(MessageEnvelope<T> envelope)
     {
         var buffer = new ArrayBufferWriter<byte>();
+        SerializeToMessage(envelope, buffer);
+        return buffer.WrittenMemory;
+    }
+
+    public void SerializeToMessage<T>(MessageEnvelope<T> envelope, IBufferWriter<byte> buffer)
+    {
         using var writer = new Utf8JsonWriter(buffer, WriterOptions);
 
         writer.WriteStartObject();
@@ -85,7 +90,5 @@ public sealed class JsonMessageSerializer(JsonSerializerOptions options) : IMess
         JsonSerializer.Serialize(writer, envelope.Value, options);
         writer.WriteEndObject();
         writer.Flush();
-
-        return buffer.WrittenMemory;
     }
 }

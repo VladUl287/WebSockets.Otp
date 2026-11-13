@@ -1,4 +1,5 @@
-﻿using System.Net.WebSockets;
+﻿using System.Buffers;
+using System.Net.WebSockets;
 using WebSockets.Otp.Abstractions.Options;
 
 namespace WebSockets.Otp.Abstractions.Serializers;
@@ -12,4 +13,5 @@ public interface IMessageSerializer
 
     MessageHeaders ReadHeaders(ReadOnlyMemory<byte> data);
     ReadOnlyMemory<byte> SerializeToMessage<T>(MessageEnvelope<T> data);
+    void SerializeToMessage<T>(MessageEnvelope<T> data, IBufferWriter<byte> buffer);
 }
