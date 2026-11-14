@@ -24,7 +24,7 @@ public sealed class RequestResponseEndpointInvoker<TRequest, TResponse> : IEndpo
         try
         {
             var response = await typedEndpoint.HandleAsync(request, context);
-            var envelope = new ResponseMessage<TResponse>(context.CorrelationId, response);
+            var envelope = new ResponseMessage(context.CorrelationId, response);
             await context.Manager.Send(connection.Id, envelope, context.Cancellation);
         }
         catch (Exception ex)

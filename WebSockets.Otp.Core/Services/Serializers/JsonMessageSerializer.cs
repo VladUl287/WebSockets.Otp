@@ -1,6 +1,6 @@
 ﻿using System.Buffers;
-using System.Net.WebSockets;
 using System.Text.Json;
+using System.Net.WebSockets;
 using WebSockets.Otp.Abstractions.Options;
 using WebSockets.Otp.Abstractions.Serializers;
 
@@ -21,7 +21,23 @@ public sealed class JsonMessageSerializer(JsonSerializerOptions options) : IMess
         writer.WriteStartObject();
         writer.WriteNumber("type", data.Type.Value);
 
-        data.WritePayload(writer, options);
+        switch (data)
+        {
+            case ResponseMessage m:
+                writer.WriteNumber("id"u8, m.Id);
+                writer.WritePropertyName("value"u8);
+                JsonSerializer.Serialize(writer, m.Value, options);
+                break;
+            case ErrorMessage m:
+                writer.WriteNumber("id"u8, m.Id);
+                writer.WriteString("error"u8, m.Error);
+                break;
+            case EventMessage m:
+                writer.WriteString("key"u8, m.Key);
+                writer.WritePropertyName("value"u8);
+                JsonSerializer.Serialize(writer, m.Value, options);
+                break;
+        }
 
         writer.WriteEndObject();
         writer.Flush();

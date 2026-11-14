@@ -33,7 +33,7 @@ public sealed class SendManager(IWsConnectionManager manager)
     public async ValueTask SendAsync<TData>(string key, TData data, CancellationToken token = default)
         where TData : notnull
     {
-        var envelope = new EventMessage<TData>(key, data);
+        var envelope = new EventMessage(key, data);
 
         try
         {
