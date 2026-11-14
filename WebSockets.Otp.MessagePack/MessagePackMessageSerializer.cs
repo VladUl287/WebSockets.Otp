@@ -66,7 +66,7 @@ public sealed class MessagePackMessageSerializer(MessagePackSerializerOptions op
         }
         else
         {
-            var seq = reader.ReadStringSequence() ?? throw new FormatException();
+            var seq = reader.ReadStringSequence() ?? throw new FormatException("Header 'key' must be a string.");
             key = seq.IsSingleSegment ? seq.First : seq.ToArray();
         }
 
