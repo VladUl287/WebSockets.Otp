@@ -5,7 +5,7 @@ using Microsoft.Extensions.Options;
 using System.Security.Claims;
 using System.Text.Encodings.Web;
 
-namespace WebSockets.Otp.Core.Tests.Services.Auth;
+namespace WebSockets.Otp.Core.Tests.Auth;
 
 public sealed class TestAuthHandler : AuthenticationHandler<AuthenticationSchemeOptions>
 {

@@ -10,7 +10,7 @@ using WebSockets.Otp.Abstractions.Serializers;
 using WebSockets.Otp.Abstractions.Transport;
 using WebSockets.Otp.Core.Processors;
 
-namespace WebSockets.Otp.Core.Tests.Services.Processors;
+namespace WebSockets.Otp.Core.Tests.Processors;
 
 public class ParallelMessageProcessorTests
 {

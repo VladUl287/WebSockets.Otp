@@ -11,7 +11,7 @@ using WebSockets.Otp.Abstractions.Transport;
 using WebSockets.Otp.Core.Services;
 
 
-namespace WebSockets.Otp.Core.Tests.Services;
+namespace WebSockets.Otp.Core.Tests;
 
 public class DefaultConnectionHandlerTests
 {

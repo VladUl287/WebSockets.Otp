@@ -4,7 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using System.Security.Claims;
 using WebSockets.Otp.Abstractions.Endpoints;
 
-namespace WebSockets.Otp.Core.Tests.Services.Auth;
+namespace WebSockets.Otp.Core.Tests.Auth;
 
 public sealed class EndpointAuthorizerTests : IClassFixture<EndpointAuthorizerFixture>
 {

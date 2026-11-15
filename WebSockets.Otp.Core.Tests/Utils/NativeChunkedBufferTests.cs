@@ -1,7 +1,7 @@
 ﻿using System.Buffers;
 using WebSockets.Otp.Core.Services.Utils;
 
-namespace WebSockets.Otp.Core.Tests.Services.Utils;
+namespace WebSockets.Otp.Core.Tests.Utils;
 
 public class NativeChunkedBufferTests : IDisposable
 {
