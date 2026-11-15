@@ -22,8 +22,8 @@ public sealed class RedisConnectionManager : IWsConnectionManager, IAsyncDisposa
             .WithResolver(ContractlessStandardResolver.Instance)
             .WithSecurity(MessagePackSecurity.UntrustedData);
 
-    private static readonly MessagePackSerializerOptions PayloadOptions =
-        MessagePackSerializer.DefaultOptions
+    private static readonly MessagePackSerializerOptions PayloadOptions = 
+        MessagePackSerializer.Typeless.DefaultOptions
             .WithSecurity(MessagePackSecurity.UntrustedData);
 
     [MessagePackObject(AllowPrivate = true)]
