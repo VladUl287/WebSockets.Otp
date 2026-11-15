@@ -1,5 +1,3 @@
-export type Protocol = "json" | (string & {})
-
 export enum MessageType {
     response = 1,
     error = 2,
@@ -32,14 +30,8 @@ export type WsMessageRequest<T> = {
     value: T
 }
 
-export type Serializer = {
-    readonly protocol: Protocol,
-    readonly serialize: (data: unknown) => string | BufferSource | Blob
-    readonly deserialize: (data: string | BufferSource | Blob) => Promise<WsMessage>
-}
-
 export interface HandshakeMessage {
-    protocol: Protocol
+    protocol: string
 }
 
 export interface EndpointMessage {

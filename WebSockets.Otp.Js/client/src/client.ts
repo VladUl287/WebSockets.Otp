@@ -1,7 +1,8 @@
+import { jsonSerializer } from "@fefruess/websockets.otp.json"
+import type { Serializer } from "@fefruess/websockets.otp.serializer.core"
 import { usePendingRegistry, type PendingRegistry } from "./pending"
 import { buildSchedule } from "./schedule"
-import { jsonSerializer } from "./serializers"
-import { MessageType, type ConnectionState, type Serializer, type WsMessage } from "./types"
+import { MessageType, type ConnectionState, type WsMessage } from "./types"
 
 const defaultFactory = (url: string): WebSocket => {
     if (typeof WebSocket === "undefined") {

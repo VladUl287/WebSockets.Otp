@@ -48,5 +48,8 @@
     "jest": "^30.5.2",
     "ts-jest": "^29.4.14",
     "tsx": "^4.23.15"
+  },
+  "dependencies": {
+    "@fefruess/websockets.otp.json": "^0.0.1"
   }
 }
