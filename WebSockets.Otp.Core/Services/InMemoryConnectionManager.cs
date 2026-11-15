@@ -41,9 +41,14 @@ public sealed class InMemoryConnectionManager(ObjectPool<ArrayBufferWriter<byte>
         var buffer = objectPool.Get();
         serializer.SerializeMessage(envelope, buffer);
 
-        await connection.Socket.SendAsync(buffer.WrittenMemory, serializer.Type, true, token);
-
-        objectPool.Return(buffer);
+        try
+        {
+            await connection.Socket.SendAsync(buffer.WrittenMemory, serializer.Type, true, token);
+        }
+        finally
+        {
+            objectPool.Return(buffer);
+        }
     }
 
     static async Task RunWithCleanup(Task work, ObjectPool<ArrayBufferWriter<byte>> objectPool, ArrayBufferWriter<byte> buffer)
