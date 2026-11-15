@@ -82,6 +82,8 @@ public sealed class JsonMessageSerializer(JsonSerializerOptions options) : IMess
             }
             else if (reader.ValueTextEquals("value"u8))
             {
+                reader.Read();
+
                 var start = (int)reader.TokenStartIndex;
 
                 reader.Skip();
