@@ -1,7 +1,7 @@
 import { usePendingRegistry, type PendingRegistry } from "./pending"
 import { buildSchedule } from "./schedule"
 import { jsonSerializer } from "./serializers"
-import type { ConnectionState, PendingRequest, Serializer } from "./types"
+import { MessageType, type ConnectionState, type Serializer, type WsMessage } from "./types"
 
 const defaultFactory = (url: string): WebSocket => {
     if (typeof WebSocket === "undefined") {
@@ -190,7 +190,7 @@ export const useWsClient = (options: WsClientOptions): WsClient => {
     }
 
     const handleHandshakeMessage = async (data: string | BufferSource | Blob): Promise<void> => {
-        let value: unknown
+        let value: {}
         try {
             value = await defaultSerializer.deserialize(data)
         } catch (error) {
@@ -252,7 +252,7 @@ export const useWsClient = (options: WsClientOptions): WsClient => {
 
         const socket = ws
         const correlationId = nextCorrelationId()
-        const message = serializer.serialize({ key, id: correlationId, value })
+        const message = serializer.serialize({ id: correlationId, key, value })
 
         return new Promise<TResponse>((resolve, reject) => {
             try {
@@ -270,7 +270,7 @@ export const useWsClient = (options: WsClientOptions): WsClient => {
             throw new Error("Client is not connected")
         }
 
-        const request: Record<string, any> = { key, value }
+        const request: Record<string, any> = { id: 0, key, value }
         const message = serializer.serialize(request)
         ws.send(message)
     }
@@ -297,7 +297,7 @@ export const useWsClient = (options: WsClientOptions): WsClient => {
     }
 
     const handleMessage = async (data: string | BufferSource | Blob): Promise<void> => {
-        let parsed: unknown
+        let parsed: WsMessage
         try {
             parsed = await serializer.deserialize(data)
         } catch {
@@ -305,29 +305,23 @@ export const useWsClient = (options: WsClientOptions): WsClient => {
         }
 
         if (parsed && typeof parsed === "object") {
-            const obj = parsed as Record<string, unknown>
-
-            if (typeof obj.id === "number") {
-                const key = obj.id
-                if (obj.error) {
-                    pending.reject(key, obj.error)
-                }
-                if ('value' in obj) {
-                    pending.resolve(key, obj.value)
-                }
-                return
-            }
-
-            if (typeof obj.key === "string") {
-                const key = obj.key
-                const set = handlers.get(key)
-                if (!set) return
-                for (const handler of set) {
-                    try {
-                        handler(obj.value)
+            switch (parsed.type) {
+                case MessageType.response:
+                    pending.resolve(parsed.id, parsed.value)
+                    break
+                case MessageType.event:
+                    const set = handlers.get(parsed.key)
+                    if (!set) return
+                    for (const handler of set) {
+                        try {
+                            handler(parsed.value)
+                        }
+                        catch (err) { }
                     }
-                    catch (err) { }
-                }
+                    break
+                case MessageType.error:
+                    pending.reject(parsed.id, parsed.error)
+                    break
             }
         }
     }
