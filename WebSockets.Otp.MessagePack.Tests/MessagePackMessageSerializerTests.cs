@@ -212,13 +212,13 @@ public sealed class MessagePackMessageSerializerTests
         Assert.Equal(2, reader.ReadInt32());
     }
 
-    //[Fact]
-    //public void ReadHeaders_ValueAsNil_IsEmptySlice()
-    //{
-    //    var h = NewSerializer().ReadHeaders(BuildHeaders(1, "k", w => w.WriteNil()));
-    //    Assert.False(h.Value.IsEmpty);
-    //    Assert.Equal(0xC0, h.Value.Span[0]);
-    //}
+    [Fact]
+    public void ReadHeaders_ValueAsNil_IsEmptySlice()
+    {
+        var h = NewSerializer().ReadHeaders(BuildHeaders(1, "k", (ref MessagePackWriter w) => w.WriteNil()));
+        Assert.False(h.Value.IsEmpty);
+        Assert.Equal(0xC0, h.Value.Span[0]);
+    }
 
     [Fact]
     public void ReadHeaders_LargeId()
