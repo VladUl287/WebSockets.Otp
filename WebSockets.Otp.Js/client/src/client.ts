@@ -159,7 +159,7 @@ export const useWsClient = (options: WsClientOptions): WsClient => {
                 return
             }
 
-            let message: string | BufferSource | Blob
+            let message: string | ArrayBuffer | Uint8Array<ArrayBuffer>
             try {
                 message = defaultSerializer.serialize({ protocol: serializer.protocol })
             } catch (err) {
@@ -190,10 +190,24 @@ export const useWsClient = (options: WsClientOptions): WsClient => {
         })
     }
 
+    const toBytes = async (data: string | BufferSource | Blob): Promise<string | ArrayBuffer | Uint8Array<ArrayBuffer>> => {
+        if (typeof data === 'string') 
+            return data
+
+        if (data instanceof ArrayBuffer)
+            return data
+
+        if (ArrayBuffer.isView(data))
+            return new Uint8Array(data.buffer)
+
+        return new Uint8Array(await data.arrayBuffer())
+    }
+
+
     const handleHandshakeMessage = async (data: string | BufferSource | Blob): Promise<void> => {
         let value: unknown
         try {
-            value = await defaultSerializer.deserialize(data)
+            value = await defaultSerializer.deserialize(await toBytes(data))
         } catch (error) {
             pending.reject(HANDSHAKE_ID, error instanceof Error ? error : new Error("Unable to deserialize handshake response"))
             return
@@ -236,7 +250,7 @@ export const useWsClient = (options: WsClientOptions): WsClient => {
         queue.splice(0).forEach(({ key, value, resolve, reject }) => {
             const correlationId = nextCorrelationId()
             try {
-                const message = serializer.serializeMessage({ key, id: correlationId, value })
+                const message = serializer.serializeRequest({ key, id: correlationId, value })
                 pending.enqueue(correlationId, { resolve, reject })
                 socket.send(message)
             } catch (err) {
@@ -253,7 +267,7 @@ export const useWsClient = (options: WsClientOptions): WsClient => {
 
         const socket = ws
         const correlationId = nextCorrelationId()
-        const message = serializer.serializeMessage({ id: correlationId, key, value })
+        const message = serializer.serializeRequest({ id: correlationId, key, value })
 
         return new Promise<TResponse>((resolve, reject) => {
             try {
@@ -271,7 +285,7 @@ export const useWsClient = (options: WsClientOptions): WsClient => {
             throw new Error("Client is not connected")
         }
 
-        const message = serializer.serializeMessage({ id: 0, key, value })
+        const message = serializer.serializeRequest({ id: 0, key, value })
         ws.send(message)
     }
 
@@ -297,7 +311,7 @@ export const useWsClient = (options: WsClientOptions): WsClient => {
     }
 
     const handleMessage = async (data: string | BufferSource | Blob): Promise<void> => {
-        const parsed = await serializer.deserializeMessage(data)
+        const parsed = serializer.deserializeServer(await toBytes(data))
 
         switch (parsed.type) {
             case MessageType.response:

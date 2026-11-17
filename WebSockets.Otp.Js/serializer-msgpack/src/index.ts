@@ -1,19 +1,7 @@
 import { MessageType, type MessageSerializer } from "@fefruess/websockets.otp.serializer.core"
 import { Decoder, Encoder, type DecoderOptions, type EncoderOptions } from "@msgpack/msgpack"
 
-const encoder = new TextEncoder()
-export const toBytes = async (data: string | BufferSource | Blob): Promise<Uint8Array> => {
-    if (typeof data === 'string')
-        return encoder.encode(data)
-
-    if (data instanceof ArrayBuffer)
-        return new Uint8Array(data)
-
-    if (ArrayBuffer.isView(data))
-        return new Uint8Array(data.buffer)
-
-    return new Uint8Array(await data.arrayBuffer())
-}
+const textEncoder = new TextEncoder()
 
 export const msgPackSerializer = (options?: {
     encoder?: EncoderOptions<unknown>
@@ -24,9 +12,13 @@ export const msgPackSerializer = (options?: {
 
     return {
         protocol: 'messagepack',
+
         serialize: (data) => encoder.encode(data),
-        deserialize: async (data) => decoder.decode(await toBytes(data)),
-        serializeMessage: (data) => {
+        deserialize: (data) => {
+            return decoder.decode(typeof data === "string" ? textEncoder.encode(data) : data)
+        },
+
+        serializeRequest: (data) => {
             if (data === null) throw new TypeError('data is null/undefined')
 
             if (!Number.isInteger(data.id) || data.id < 0 || data.id > 0xffffffff)
@@ -37,8 +29,8 @@ export const msgPackSerializer = (options?: {
 
             return encoder.encode([data.id, data.key, data.value])
         },
-        deserializeMessage: async (bytes) => {
-            const [type, a, b] = decoder.decode(await toBytes(bytes)) as [number, unknown, unknown]
+        deserializeServer: (data) => {
+            const [type, a, b] = decoder.decode(typeof data === "string" ? textEncoder.encode(data) : data) as [number, unknown, unknown]
 
             switch (type) {
                 case MessageType.response:

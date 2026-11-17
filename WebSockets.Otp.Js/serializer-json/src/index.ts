@@ -1,34 +1,35 @@
-import { MessageType, type MessageSerializer } from "@fefruess/websockets.otp.serializer.core"
+import { MessageType, type MessageSerializer, type ServerMessage } from "@fefruess/websockets.otp.serializer.core"
 
-const encoder = new TextEncoder()
 const decoder = new TextDecoder()
 
-export const toBytes = async (data: BufferSource | Blob): Promise<Uint8Array> => {
-    if (data instanceof ArrayBuffer)
-        return new Uint8Array(data)
+function isServerMessage(v: unknown): v is ServerMessage {
+    if (typeof v !== 'object' || v === null) return false
 
-    if (ArrayBuffer.isView(data))
-        return new Uint8Array(data.buffer)
-
-    return new Uint8Array(await data.arrayBuffer())
+    const o = v as Record<string, unknown>
+    switch (o.type) {
+        case MessageType.response: return typeof o.id === 'number'
+        case MessageType.error: return typeof o.id === 'number' && typeof o.error === 'string'
+        case MessageType.event: return typeof o.key === 'string'
+        default: return false
+    }
 }
 
-export const jsonSerializer = (): MessageSerializer => ({
-    protocol: 'json',
-    serialize: (data) => JSON.stringify(data),
-    deserialize: async (data) => JSON.parse(typeof data === "string" ? data : decoder.decode(await toBytes(data))),
-    serializeMessage: (data) => {
-        return `{"id":${JSON.stringify(data.id)},"key":${JSON.stringify(data.key)},"value":${JSON.stringify(data.value)}}`
-    },
-    deserializeMessage: async (data) => {
-        const result = JSON.parse(typeof data === "string" ? data : decoder.decode(await toBytes(data)))
-        switch (result.type) {
-            case MessageType.response:
-            case MessageType.error:
-            case MessageType.event:
-                return result
-            default:
-                throw new Error(`Unknown message type: ${result.type}`);
+export const jsonSerializer = (): MessageSerializer => {
+    return {
+        protocol: 'json',
+
+        serialize: (data) => JSON.stringify(data),
+        deserialize: (data) => JSON.parse(typeof data === "string" ? data : decoder.decode(data)),
+
+        serializeRequest: (data) => {
+            return `{"id":${data.id},"key":"${data.key}","value":${JSON.stringify(data.value)}}`
+        },
+        deserializeServer: (data) => {
+            const result = JSON.parse(typeof data === "string" ? data : decoder.decode(data))
+            if (!isServerMessage(result)) {
+                throw new Error(`invalid server message: json`)
+            }
+            return result
         }
     }
-})
+}
