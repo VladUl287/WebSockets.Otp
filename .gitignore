@@ -486,3 +486,5 @@ $RECYCLE.BIN/
 coverage
 dist
 .vscode
+
+*.tgz
