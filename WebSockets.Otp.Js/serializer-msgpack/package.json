@@ -19,7 +19,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@fefruess/websockets.otp.serializer.core": "^0.0.1",
+    "@fefruess/websockets.otp.serializer.core": "file:../serializer-core/fefruess-websockets.otp.serializer.core-0.0.1.tgz",
     "@msgpack/msgpack": "^3.1.3"
   }
 }
