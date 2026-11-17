@@ -15,7 +15,9 @@
     "type": "git",
     "url": "https://github.com/VladUl287/WebSoket.Otp/tree/main/WebSockets.Otp.Js"
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "license": "MIT",
   "exports": {
     "./client": {
@@ -46,6 +48,6 @@
     "tsx": "^4.23.15"
   },
   "dependencies": {
-    "@fefruess/websockets.otp.json": "^0.0.1"
+    "@fefruess/websockets.otp.json": "file:../serializer-json/fefruess-websockets.otp.json-0.0.1.tgz"
   }
 }

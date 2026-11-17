@@ -1,8 +1,8 @@
 import { jsonSerializer } from "@fefruess/websockets.otp.json"
-import type { Serializer } from "@fefruess/websockets.otp.serializer.core"
+import { MessageType, type MessageSerializer, type ServerMessage } from "@fefruess/websockets.otp.serializer.core"
 import { usePendingRegistry, type PendingRegistry } from "./pending.js"
 import { buildSchedule } from "./schedule.js"
-import { MessageType, type ConnectionState, type WsMessage } from "./types.js"
+import { type ConnectionState } from "./types.js"
 
 const defaultFactory = (url: string): WebSocket => {
     if (typeof WebSocket === "undefined") {
@@ -15,8 +15,8 @@ type Handler<T> = (value: T) => void
 
 export type WsClientOptions = {
     readonly url: string | (() => string),
-    readonly defaultSerializer?: Serializer,
-    readonly serializer?: Serializer,
+    readonly defaultSerializer?: MessageSerializer,
+    readonly serializer?: MessageSerializer,
     readonly socketFactory?: typeof defaultFactory,
     readonly scheduleFactory?: ReturnType<typeof buildSchedule>,
     readonly pendingFactory?: () => PendingRegistry<number>,
@@ -161,7 +161,7 @@ export const useWsClient = (options: WsClientOptions): WsClient => {
 
             let message: string | BufferSource | Blob
             try {
-                message = defaultSerializer.serialize({ protocol: defaultSerializer.protocol })
+                message = defaultSerializer.serialize({ protocol: serializer.protocol })
             } catch (err) {
                 reject(err)
                 return
@@ -191,7 +191,7 @@ export const useWsClient = (options: WsClientOptions): WsClient => {
     }
 
     const handleHandshakeMessage = async (data: string | BufferSource | Blob): Promise<void> => {
-        let value: {}
+        let value: unknown
         try {
             value = await defaultSerializer.deserialize(data)
         } catch (error) {
@@ -253,7 +253,7 @@ export const useWsClient = (options: WsClientOptions): WsClient => {
 
         const socket = ws
         const correlationId = nextCorrelationId()
-        const message = serializer.serialize({ id: correlationId, key, value })
+        const message = serializer.serializeMessage({ id: correlationId, key, value })
 
         return new Promise<TResponse>((resolve, reject) => {
             try {
@@ -271,8 +271,7 @@ export const useWsClient = (options: WsClientOptions): WsClient => {
             throw new Error("Client is not connected")
         }
 
-        const request: Record<string, any> = { id: 0, key, value }
-        const message = serializer.serialize(request)
+        const message = serializer.serializeMessage({ id: 0, key, value })
         ws.send(message)
     }
 
@@ -298,32 +297,25 @@ export const useWsClient = (options: WsClientOptions): WsClient => {
     }
 
     const handleMessage = async (data: string | BufferSource | Blob): Promise<void> => {
-        let parsed: WsMessage
-        try {
-            parsed = await serializer.deserialize(data)
-        } catch {
-            return
-        }
+        const parsed = await serializer.deserializeMessage(data)
 
-        if (parsed && typeof parsed === "object") {
-            switch (parsed.type) {
-                case MessageType.response:
-                    pending.resolve(parsed.id, parsed.value)
-                    break
-                case MessageType.event:
-                    const set = handlers.get(parsed.key)
-                    if (!set) return
-                    for (const handler of set) {
-                        try {
-                            handler(parsed.value)
-                        }
-                        catch (err) { }
+        switch (parsed.type) {
+            case MessageType.response:
+                pending.resolve(parsed.id, parsed.value)
+                break
+            case MessageType.event:
+                const set = handlers.get(parsed.key)
+                if (!set) return
+                for (const handler of set) {
+                    try {
+                        handler(parsed.value)
                     }
-                    break
-                case MessageType.error:
-                    pending.reject(parsed.id, parsed.error)
-                    break
-            }
+                    catch (err) { }
+                }
+                break
+            case MessageType.error:
+                pending.reject(parsed.id, parsed.error)
+                break
         }
     }
 

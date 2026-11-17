@@ -1,6 +1,9 @@
-import type { Serializer } from "@fefruess/websockets.otp.serializer.core"
+import { MessageType, type MessageSerializer } from "@fefruess/websockets.otp.serializer.core"
 
-export const asBytes = async (data: BufferSource | Blob): Promise<Uint8Array> => {
+const encoder = new TextEncoder()
+const decoder = new TextDecoder()
+
+export const toBytes = async (data: BufferSource | Blob): Promise<Uint8Array> => {
     if (data instanceof ArrayBuffer)
         return new Uint8Array(data)
 
@@ -10,10 +13,22 @@ export const asBytes = async (data: BufferSource | Blob): Promise<Uint8Array> =>
     return new Uint8Array(await data.arrayBuffer())
 }
 
-const encoder = new TextEncoder()
-const decoder = new TextDecoder()
-export const jsonSerializer = (): Serializer => ({
+export const jsonSerializer = (): MessageSerializer => ({
     protocol: 'json',
     serialize: (data) => encoder.encode(JSON.stringify(data)),
-    deserialize: async (data) => JSON.parse(typeof data === "string" ? data : decoder.decode(await asBytes(data)))
+    deserialize: async (data) => JSON.parse(typeof data === "string" ? data : decoder.decode(await toBytes(data))),
+    serializeMessage: (data) => {
+        return encoder.encode(`{"id":${JSON.stringify(data.id)},"key":${JSON.stringify(data.key)},"value":${JSON.stringify(data)}}`)
+    },
+    deserializeMessage: async (data) => {
+        const result = JSON.parse(typeof data === "string" ? data : decoder.decode(await toBytes(data)))
+        switch (result.type) {
+            case MessageType.response:
+            case MessageType.error:
+            case MessageType.event:
+                return result
+            default:
+                throw new Error(`Unknown message type: ${result.type}`);
+        }
+    }
 })
