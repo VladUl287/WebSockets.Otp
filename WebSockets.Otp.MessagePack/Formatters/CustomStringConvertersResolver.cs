@@ -11,10 +11,8 @@ public sealed class CustomStringConvertersResolver : IFormatterResolver
     {
         if (typeof(T) == typeof(Guid)) 
             return (IMessagePackFormatter<T>)(object)GuidStringFormatter.Instance;
-        if (typeof(T) == typeof(DateTimeOffset)) 
+        if (typeof(T) == typeof(DateTimeOffset))
             return (IMessagePackFormatter<T>)(object)DateTimeOffsetStringFormatter.Instance;
-        if (typeof(T) == typeof(DateTime)) 
-            return (IMessagePackFormatter<T>)(object)DateTimeStringFormatter.Instance;
         return null;
     }
 }
