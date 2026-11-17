@@ -8,6 +8,7 @@ using System.Text;
 using WebSockets.Otp.Api;
 using WebSockets.Otp.Api.Database;
 using WebSockets.Otp.Core.Extensions;
+using WebSockets.Otp.MessagePack.Extensions;
 using WebSockets.Otp.Redis.Extensions;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -57,6 +58,7 @@ var builder = WebApplication.CreateBuilder(args);
     builder.Services.AddAuthorization();
 
     builder.Services.AddWsEndpoints();
+    builder.Services.AddMessagePackSerializer();
 
     //builder.Services.AddSingleton<IConnectionMultiplexer>(sp => ConnectionMultiplexer.Connect("localhost:6379"));
     //builder.Services.AddRedisManager();

@@ -15,6 +15,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\WebSockets.Otp.Core\WebSockets.Otp.Core.csproj" />
+    <ProjectReference Include="..\WebSockets.Otp.MessagePack\WebSockets.Otp.MessagePack.csproj" />
     <ProjectReference Include="..\WebSockets.Otp.Redis\WebSockets.Otp.Redis.csproj" />
   </ItemGroup>
 
