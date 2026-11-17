@@ -236,7 +236,7 @@ export const useWsClient = (options: WsClientOptions): WsClient => {
         queue.splice(0).forEach(({ key, value, resolve, reject }) => {
             const correlationId = nextCorrelationId()
             try {
-                const message = serializer.serialize({ key, id: correlationId, value })
+                const message = serializer.serializeMessage({ key, id: correlationId, value })
                 pending.enqueue(correlationId, { resolve, reject })
                 socket.send(message)
             } catch (err) {
