@@ -14,6 +14,7 @@ public static class ServiceCollectionExtensions
             .WithResolver(
                 CompositeResolver.Create(
                     CustomStringConvertersResolver.Instance,
+                    StandardResolver.Instance,
                     ContractlessStandardResolver.Instance
                 )
             );
@@ -26,6 +27,7 @@ public static class ServiceCollectionExtensions
             .WithResolver(
                 CompositeResolver.Create(
                     CustomStringConvertersResolver.Instance,
+                    StandardResolver.Instance,
                     ContractlessStandardResolver.Instance
                 )
             );
