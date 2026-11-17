@@ -15,10 +15,10 @@ export const toBytes = async (data: BufferSource | Blob): Promise<Uint8Array> =>
 
 export const jsonSerializer = (): MessageSerializer => ({
     protocol: 'json',
-    serialize: (data) => encoder.encode(JSON.stringify(data)),
+    serialize: (data) => JSON.stringify(data),
     deserialize: async (data) => JSON.parse(typeof data === "string" ? data : decoder.decode(await toBytes(data))),
     serializeMessage: (data) => {
-        return encoder.encode(`{"id":${JSON.stringify(data.id)},"key":${JSON.stringify(data.key)},"value":${JSON.stringify(data)}}`)
+        return `{"id":${JSON.stringify(data.id)},"key":${JSON.stringify(data.key)},"value":${JSON.stringify(data.value)}}`
     },
     deserializeMessage: async (data) => {
         const result = JSON.parse(typeof data === "string" ? data : decoder.decode(await toBytes(data)))
