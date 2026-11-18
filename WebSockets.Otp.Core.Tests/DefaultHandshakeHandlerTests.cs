@@ -50,7 +50,7 @@ public class DefaultHandshakeHandlerTests
         var result = await _handler.HandleAsync(_httpContextMock.Object, _webSocketMock.Object, options, token);
 
         // Assert
-        Assert.Null(result);
+        Assert.True(result.IsError);
     }
 
     [Fact]
@@ -78,7 +78,7 @@ public class DefaultHandshakeHandlerTests
         var result = await _handler.HandleAsync(_httpContextMock.Object, _webSocketMock.Object, options, token);
 
         // Assert
-        Assert.Null(result);
+        Assert.True(result.IsError);
         _storeMock.Verify(s => s.TryGet("json", out It.Ref<IMessageSerializer?>.IsAny), Times.Once);
     }
 

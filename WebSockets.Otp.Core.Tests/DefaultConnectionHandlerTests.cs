@@ -63,7 +63,7 @@ public class DefaultConnectionHandlerTests
             .ReturnsAsync(_webSocketMock.Object);
 
         _handshakeServiceMock.Setup(x => x.HandleAsync(It.IsAny<HttpContext>(), It.IsAny<WebSocket>(), It.IsAny<WsOptionsSnapshot>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((HandshakeOptions?)null);
+            .ReturnsAsync(new HandshakeError.NoMessage());
 
         // Act
         await _handler.HandleAsync(_httpContextMock.Object, config);
@@ -87,7 +87,7 @@ public class DefaultConnectionHandlerTests
             .ReturnsAsync(_webSocketMock.Object);
 
         _handshakeServiceMock.Setup(x => x.HandleAsync(It.IsAny<HttpContext>(), It.IsAny<WebSocket>(), It.IsAny<WsOptionsSnapshot>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((HandshakeOptions?)null);
+            .ReturnsAsync(new HandshakeError.NoMessage());
 
         // Act
         await _handler.HandleAsync(_httpContextMock.Object, config);
