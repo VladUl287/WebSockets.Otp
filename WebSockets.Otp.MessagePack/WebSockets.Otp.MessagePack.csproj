@@ -4,10 +4,21 @@
 		<TargetFrameworks>net8.0;net9.0;net10.0</TargetFrameworks>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>enable</Nullable>
+		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+
+		<Version>0.0.1</Version>
+		<PackageVersion>$(Version)</PackageVersion>
+
+		<PackageLicenseExpression>MIT</PackageLicenseExpression>
+		<PackageProjectUrl>https://github.com/VladUl287/WebSoket.Otp</PackageProjectUrl>
+		<RepositoryUrl>https://github.com/VladUl287/WebSoket.Otp</RepositoryUrl>
+
+		<PackageIcon>icon.png</PackageIcon>
 	</PropertyGroup>
 
 	<ItemGroup>
-	  <PackageReference Include="MessagePack" Version="3.1.12" />
+		<None Include="icon.png" Pack="true" PackagePath="\" />
+		<PackageReference Include="MessagePack" Version="3.1.12" />
 	</ItemGroup>
 
 	<ItemGroup>
