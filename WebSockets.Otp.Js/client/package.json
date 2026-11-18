@@ -1,6 +1,6 @@
 {
   "name": "websockets.otp.js",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "Tiny WebSocket client",
   "type": "module",
   "keywords": [
@@ -48,6 +48,6 @@
     "tsx": "^4.23.15"
   },
   "dependencies": {
-    "@fefruess/websockets.otp.json": "file:../serializer-json/fefruess-websockets.otp.json-0.0.1.tgz"
+    "@fefruess/websockets.otp.json": "^0.0.2"
   }
 }
