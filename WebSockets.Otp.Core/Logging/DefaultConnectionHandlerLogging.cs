@@ -40,4 +40,16 @@ internal static partial class DefaultConnectionHandlerLogging
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Connection closed. ConnectionId - '{ConnectionId}'. TraceId - '{traceId}'")]
     public static partial void ConnectionClosed(this ILogger logger, string connectionId, RequestId traceId);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Handshake aborted: no message received. RequestId={RequestId}")]
+    public static partial void HandshakeNoMessage(this ILogger logger, RequestId requestId);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Handshake rejected: unsupported protocol '{Protocol}'. RequestId={RequestId}")]
+    public static partial void HandshakeUnsupportedProtocol(this ILogger logger, string protocol, RequestId requestId);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Handshake rejected: payload could not be deserialized. RequestId={RequestId}")]
+    public static partial void HandshakeDeserializeFailed(this ILogger logger, RequestId requestId);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Handshake rejected: failed to send acknowledgement. RequestId={RequestId}")]
+    public static partial void HandshakeSendFailed(this ILogger logger, Exception cause, RequestId requestId);
 }

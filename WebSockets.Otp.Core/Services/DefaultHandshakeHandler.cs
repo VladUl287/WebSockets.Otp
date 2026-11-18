@@ -1,54 +1,47 @@
-﻿using Microsoft.AspNetCore.Http;
-using Microsoft.Extensions.Logging;
-using System.Net.WebSockets;
+﻿using System.Net.WebSockets;
+using Microsoft.AspNetCore.Http;
 using WebSockets.Otp.Abstractions.Contracts;
 using WebSockets.Otp.Abstractions.Options;
 using WebSockets.Otp.Abstractions.Serializers;
 using WebSockets.Otp.Abstractions.Transport;
 using WebSockets.Otp.Abstractions.Utils;
 using WebSockets.Otp.Core.Extensions;
-using WebSockets.Otp.Core.Logging;
-using WebSockets.Otp.Core.Utils;
 
 namespace WebSockets.Otp.Core.Services;
 
-public sealed class DefaultHandshakeHandler(
-    ISerializerStore store, IMessageEnumerator enumerator, ILogger<DefaultHandshakeHandler> logger) : IHandshakeHandler
+public sealed class DefaultHandshakeHandler(ISerializerStore store, IMessageEnumerator enumerator) : IHandshakeHandler
 {
-    private static readonly string _protocol = "json";
-    private static readonly ReadOnlyMemory<byte> _responseBytes = "{}"u8.ToArray();
+    private const string Protocol = "json";
+    private static readonly ReadOnlyMemory<byte> ResponseBytes = "{}"u8.ToArray();
 
-    public async ValueTask<HandshakeOptions?> HandleAsync(
+    public async ValueTask<Result<HandshakeOptions, HandshakeError>> HandleAsync(
         HttpContext context, WebSocket socket, WsOptionsSnapshot options, CancellationToken token)
     {
-        var requestId = new RequestId(context);
+        var messages = enumerator.EnumerateAsync(socket, options, token);
 
-        var messagesEnumerable = enumerator.EnumerateAsync(socket, options, token);
-
-        var handshakeBuffer = await AsyncEnumerableExtensions.FirstOrDefaultAsync(messagesEnumerable, token);
+        var handshakeBuffer = await AsyncEnumerableExtensions.FirstOrDefaultAsync(messages, token);
         if (handshakeBuffer is null)
+            return new HandshakeError.NoMessage();
+
+        try
         {
-            logger.HandshakeFailReadHandshakeMessage(requestId);
-            return null;
+            if (!store.TryGet(Protocol, out var serializer))
+                return new HandshakeError.UnsupportedProtocol(Protocol);
+
+            var handshakeOptions = serializer.Deserialize<HandshakeOptions>(handshakeBuffer.Memory);
+            if (handshakeOptions is null)
+                return new HandshakeError.DeserializeFailed();
+
+            await socket.SendAsync(ResponseBytes, WebSocketMessageType.Text, true, token);
+            return handshakeOptions;
         }
-
-        logger.HandshakeMessageReceived(handshakeBuffer.Length, context);
-
-        if (!store.TryGet(_protocol, out var serializer))
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            logger.HandshakeSerializerNotFound(_protocol, requestId);
-            return null;
+            return new HandshakeError.SendFailed(ex);
         }
-
-        var handshakeOptions = serializer.Deserialize<HandshakeOptions>(handshakeBuffer.Memory);
-        if (handshakeOptions is null)
+        finally
         {
-            logger.HandshakeDeserializeFailed(requestId);
-            return null;
+            enumerator.ReturnBuffer(handshakeBuffer);
         }
-
-        await socket.SendAsync(_responseBytes, WebSocketMessageType.Text, true, token);
-        enumerator.ReturnBuffer(handshakeBuffer);
-        return handshakeOptions;
     }
 }

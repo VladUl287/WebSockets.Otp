@@ -12,7 +12,6 @@ public readonly struct Result<TSuccess, TError>(int index, TSuccess success = de
     public bool IsSuccess => _index == 0;
     public bool IsError => _index == 1;
 
-
     public static implicit operator Result<TSuccess, TError>(TSuccess t) => new(0, t, default);
     public static implicit operator Result<TSuccess, TError>(TError t) => new(1, default, t);
 
