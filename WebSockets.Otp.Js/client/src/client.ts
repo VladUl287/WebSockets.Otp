@@ -1,5 +1,5 @@
 import { jsonSerializer } from "@fefruess/websockets.otp.json"
-import { MessageType, type MessageSerializer, type ServerMessage } from "@fefruess/websockets.otp.serializer.core"
+import { MessageType, type Encoded, type MessageSerializer, type ServerMessage } from "@fefruess/websockets.otp.serializer.core"
 import { usePendingRegistry, type PendingRegistry } from "./pending.js"
 import { buildSchedule } from "./schedule.js"
 import { type ConnectionState } from "./types.js"
@@ -47,11 +47,8 @@ export const useWsClient = (options: WsClientOptions): WsClient => {
     let state: ConnectionState = "disconnected"
     let manuallyClosed = false
 
-    let schedule = scheduleFactory?.()
-
+    const schedule = scheduleFactory?.()
     const pending = pendingFactory()
-
-    const HANDSHAKE_ID = 0
 
     const connect = (): Promise<void> => {
         if (state === "connected" || state === "connecting") {
@@ -152,6 +149,7 @@ export const useWsClient = (options: WsClientOptions): WsClient => {
         rejectQueue(error)
     }
 
+    const HANDSHAKE_ID = 0
     const sendHandshake = (socket: WebSocket): Promise<{}> => {
         return new Promise<{}>((resolve, reject) => {
             if (socket.readyState !== WebSocket.OPEN) {
@@ -190,8 +188,8 @@ export const useWsClient = (options: WsClientOptions): WsClient => {
         })
     }
 
-    const toBytes = async (data: string | BufferSource | Blob): Promise<string | ArrayBuffer | Uint8Array<ArrayBuffer>> => {
-        if (typeof data === 'string') 
+    const toBytes = async (data: string | BufferSource | Blob): Promise<Encoded> => {
+        if (typeof data === 'string')
             return data
 
         if (data instanceof ArrayBuffer)
@@ -321,9 +319,7 @@ export const useWsClient = (options: WsClientOptions): WsClient => {
                 const set = handlers.get(parsed.key)
                 if (!set) return
                 for (const handler of set) {
-                    try {
-                        handler(parsed.value)
-                    }
+                    try { handler(parsed.value) }
                     catch (err) { }
                 }
                 break
