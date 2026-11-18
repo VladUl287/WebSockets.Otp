@@ -35,14 +35,16 @@ public sealed class InMemoryConnectionManager(ObjectPool<ArrayBufferWriter<byte>
 
     public async ValueTask Send(string connectionId, WsMessage envelope, CancellationToken token)
     {
-        var connection = _store[connectionId];
-        var serializer = connection.Serializer;
+        if (!_store.TryGetValue(connectionId, out var connection))
+        {
+            throw new ArgumentException($"Connection with id '{connectionId}' was not found.", nameof(connectionId));
+        }
 
         var buffer = objectPool.Get();
-        serializer.SerializeMessage(envelope, buffer);
-
         try
         {
+            var serializer = connection.Serializer;
+            serializer.SerializeMessage(envelope, buffer);
             await connection.Socket.SendAsync(buffer.WrittenMemory, serializer.Type, true, token);
         }
         finally
