@@ -104,10 +104,7 @@ public class DefaultConnectionHandlerTests
         var webSocketManagerMock = new Mock<WebSocketManager>();
         var config = new WsOptionsSnapshot(new WsOptions());
         var token = new CancellationTokenSource().Token;
-        var handshakeOptions = new HandshakeOptions()
-        {
-            Protocol = "test-protocol"
-        };
+        var handshakeOptions = new HandshakeOptions("test-protocol");
 
         _httpContextMock.Setup(x => x.WebSockets).Returns(webSocketManagerMock.Object);
         _httpContextMock.Setup(x => x.RequestAborted).Returns(token);

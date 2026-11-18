@@ -300,7 +300,7 @@ public sealed class InMemoryConnectionManagerTests
     {
         var (mgr, _) = NewManager();
 
-        await Assert.ThrowsAsync<KeyNotFoundException>(
+        await Assert.ThrowsAsync<ArgumentException>(
             async () => await mgr.Send("missing", NewMessage(), CancellationToken.None));
     }
 

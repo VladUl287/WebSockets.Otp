@@ -26,8 +26,7 @@ public class DefaultHandshakeHandlerTests
 
         _handler = new DefaultHandshakeHandler(
             _storeMock.Object,
-            _enumeratorMock.Object,
-            logger
+            _enumeratorMock.Object
         );
 
         _httpContextMock = new Mock<HttpContext>();
