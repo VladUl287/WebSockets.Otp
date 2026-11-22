@@ -1,4 +1,4 @@
 ﻿namespace WebSockets.Otp.Abstractions.Endpoints;
 
-public sealed record EmptyRequest();
-public sealed record EmptyResponse();
+public readonly struct EmptyRequest();
+public readonly struct EmptyResponse();
