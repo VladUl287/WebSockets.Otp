@@ -1,6 +1,7 @@
 ﻿namespace WebSockets.Otp.Abstractions.Utils;
 
 public readonly struct Success { }
+public readonly struct Error { }
 
 public readonly struct Result<TSuccess, TError>(int index, TSuccess success = default, TError error = default)
 {

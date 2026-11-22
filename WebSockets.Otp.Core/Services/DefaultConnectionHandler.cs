@@ -1,6 +1,5 @@
 ﻿using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
-using System.Diagnostics;
 using WebSockets.Otp.Abstractions.Connections;
 using WebSockets.Otp.Abstractions.Contracts;
 using WebSockets.Otp.Abstractions.Endpoints;
@@ -30,26 +29,7 @@ public sealed class DefaultConnectionHandler(
 
         var handshakeResult = await hanshakeService.HandleAsync(context, socket, options, token);
         if (handshakeResult.IsError)
-        {
-            switch (handshakeResult.Error)
-            {
-                case HandshakeError.NoMessage:
-                    logger.HandshakeNoMessage(requestId);
-                    break;
-                case HandshakeError.UnsupportedProtocol p:
-                    logger.HandshakeUnsupportedProtocol(p.Protocol, requestId);
-                    break;
-                case HandshakeError.DeserializeFailed:
-                    logger.HandshakeDeserializeFailed(requestId);
-                    break;
-                case HandshakeError.SendFailed f:
-                    logger.HandshakeSendFailed(f.Cause, requestId);
-                    break;
-                default:
-                    throw new UnreachableException();
-            }
             return;
-        }
 
         var handshakeOptions = handshakeResult.Value;
 
