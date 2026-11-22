@@ -7,6 +7,7 @@ using WebSockets.Otp.Abstractions.Endpoints;
 using WebSockets.Otp.Abstractions.Serializers;
 using WebSockets.Otp.Abstractions.Transport;
 using WebSockets.Otp.Abstractions.Utils;
+using WebSockets.Otp.Core.Extensions;
 using WebSockets.Otp.Core.Logging;
 
 namespace WebSockets.Otp.Core.Services;
@@ -17,26 +18,23 @@ public class DefaultMessageDispatcher(
 {
     public async Task DispatchMessage(IGlobalContext context, IMessageSerializer serializer, IMessageBuffer payload, CancellationToken token)
     {
-        var messageHeader = serializer.ReadHeaders(payload.Memory);
+        var headers = serializer.ReadHeaders(payload.Memory);
 
         try
         {
-            if (!TryResolveEndpoint(messageHeader, out var endpointInfo))
+            if (!TryResolveEndpoint(headers, out var endpointInfo))
             {
-                if (messageHeader.CorrelationId != default)
-                {
-                    var envelope = new ErrorMessage(messageHeader.CorrelationId, WsErrorCode.UnknownRoute, "Endpoint not found");
-                    await manager.Send(context.Connection.Id, envelope, token);
-                }
+                await manager.TrySendErrorAsync(
+                    context.Connection.Id, headers.CorrelationId, WsErrorCode.UnknownRoute, "Endpoint not found", token);
                 return;
             }
 
             await using var scope = scopeFactory.CreateAsyncScope();
 
-            if (!await TryAuthorizeAsync(scope.ServiceProvider, context, messageHeader, endpointInfo, token))
+            if (!await TryAuthorizeAsync(scope.ServiceProvider, context, headers, endpointInfo, token))
                 return;
 
-            await InvokeEndpointAsync(scope.ServiceProvider, context, messageHeader, endpointInfo, token);
+            await InvokeEndpointAsync(scope.ServiceProvider, context, headers, endpointInfo, token);
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested)
         {
@@ -46,21 +44,18 @@ public class DefaultMessageDispatcher(
         {
             logger.InternalError(context.Context, ex);
 
-            if (messageHeader.CorrelationId != default)
-            {
-                var envelope = new ErrorMessage(messageHeader.CorrelationId, WsErrorCode.Internal, "Internal error");
-                await manager.Send(context.Connection.Id, envelope, token);
-            }
+            await manager.TrySendErrorAsync(
+                context.Connection.Id, headers.CorrelationId, WsErrorCode.Internal, "An error occurred while processing the message.", token);
         }
     }
 
-    private bool TryResolveEndpoint(MessageHeaders messageHeader, [NotNullWhen(true)] out WsEndpointInfo? endpointInfo)
+    private bool TryResolveEndpoint(MessageHeaders headers, [NotNullWhen(true)] out WsEndpointInfo? endpoint)
     {
-        endpointInfo = null;
+        endpoint = null;
 
-        var keySlice = messageHeader.Key;
+        var keySlice = headers.Key;
 
-        if (keySlice.IsEmpty || !endpointResolver.TryResolve(keySlice, out endpointInfo))
+        if (keySlice.IsEmpty || !endpointResolver.TryResolve(keySlice, out endpoint))
         {
             logger.KeyFieldMissing();
             return false;
@@ -84,11 +79,8 @@ public class DefaultMessageDispatcher(
 
         logger.AuthorizationFailed(result.Error);
 
-        if (messageHeader.CorrelationId != default)
-        {
-            var envelope = new ErrorMessage(messageHeader.CorrelationId, WsErrorCode.Unauthorized, result.Error);
-            await manager.Send(context.Connection.Id, envelope, token);
-        }
+        await manager.TrySendErrorAsync(
+            context.Connection.Id, messageHeader.CorrelationId, WsErrorCode.Unauthorized, result.Error, token);
 
         return false;
     }
