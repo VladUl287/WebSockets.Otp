@@ -1,6 +1,6 @@
 ﻿using System.Buffers;
 using System.Net.WebSockets;
-using WebSockets.Otp.Abstractions.Options;
+using WebSockets.Otp.Abstractions.Connection;
 
 namespace WebSockets.Otp.Abstractions.Serializers;
 

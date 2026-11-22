@@ -1,4 +1,4 @@
-﻿using WebSockets.Otp.Abstractions.Connections;
+﻿using WebSockets.Otp.Abstractions.Connection;
 using WebSockets.Otp.Abstractions.Options;
 
 namespace WebSockets.Otp.Abstractions;

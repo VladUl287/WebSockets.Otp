@@ -9,7 +9,7 @@ namespace WebSockets.Otp.Core.Services;
 public sealed class MessageEnumerator(ObjectPool<IMessageBuffer> bufferPool) : IMessageEnumerator
 {
     public async IAsyncEnumerable<IMessageBuffer> EnumerateAsync(
-         WebSocket socket, WsOptionsSnapshot config, [EnumeratorCancellation] CancellationToken token)
+         WebSocket socket, WsOptions config, [EnumeratorCancellation] CancellationToken token)
     {
         var receiveBuffer = GC.AllocateUninitializedArray<byte>(config.DefaultBufferSize);
         var messageBuffer = bufferPool.Get();

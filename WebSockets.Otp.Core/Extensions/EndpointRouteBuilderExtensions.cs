@@ -11,14 +11,14 @@ namespace WebSockets.Otp.Core.Extensions;
 public static class EndpointRouteBuilderExtensions
 {
     public static WsEndpointConventionBuilder MapEndpoints(
-        this IEndpointRouteBuilder builder, string pattern, Action<WsOptions>? configure = null)
+        this IEndpointRouteBuilder builder, string pattern, Action<WsConfig>? configure = null)
     {
         ArgumentNullException.ThrowIfNull(builder, nameof(builder));
         ArgumentNullException.ThrowIfNull(pattern, nameof(pattern));
 
-        var diOptions = builder.ServiceProvider.GetRequiredService<WsOptions>();
+        var diOptions = builder.ServiceProvider.GetRequiredService<WsConfig>();
         configure?.Invoke(diOptions);
-        var options = new WsOptionsSnapshot(diOptions);
+        var options = new WsOptions(diOptions);
 
         var app = builder.CreateApplicationBuilder();
         app.UseWebSockets(options.WebSocketOptions);

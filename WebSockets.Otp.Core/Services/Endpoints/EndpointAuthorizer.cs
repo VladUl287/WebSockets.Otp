@@ -9,7 +9,7 @@ namespace WebSockets.Otp.Core.Services.Endpoints;
 
 public sealed class EndpointAuthorizer(ILogger<EndpointAuthorizer> logger) : IEndpointAuthorizer
 {
-    public async Task<Outcome<Success, string>> AuthorizeAsync(HttpContext context, WsEndpointInfo info)
+    public async Task<Result<Success, string>> AuthorizeAsync(HttpContext context, WsEndpointInfo info)
     {
         var principal = context.User;
         if (principal is null)

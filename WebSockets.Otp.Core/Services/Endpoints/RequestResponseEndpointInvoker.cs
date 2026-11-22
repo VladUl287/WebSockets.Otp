@@ -1,8 +1,6 @@
 ﻿using System.Runtime.CompilerServices;
-using WebSockets.Otp.Abstractions;
+using WebSockets.Otp.Abstractions.Connection;
 using WebSockets.Otp.Abstractions.Endpoints;
-using WebSockets.Otp.Abstractions.Options;
-using WebSockets.Otp.Abstractions.Utils;
 
 namespace WebSockets.Otp.Core.Services.Endpoints;
 

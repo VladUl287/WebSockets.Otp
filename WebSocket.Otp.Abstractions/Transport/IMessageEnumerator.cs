@@ -5,6 +5,6 @@ namespace WebSockets.Otp.Abstractions.Transport;
 
 public interface IMessageEnumerator
 {
-    IAsyncEnumerable<IMessageBuffer> EnumerateAsync(WebSocket socket, WsOptionsSnapshot config, CancellationToken token);
+    IAsyncEnumerable<IMessageBuffer> EnumerateAsync(WebSocket socket, WsOptions config, CancellationToken token);
     void ReturnBuffer(IMessageBuffer buffer);
 }

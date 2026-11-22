@@ -13,7 +13,7 @@ public class MessageEnumeratorTests
     private readonly Mock<WebSocket> _mockWebSocket;
     private readonly Mock<ObjectPool<IMessageBuffer>> _mockBufferPool;
     private readonly Mock<IMessageBuffer> _mockMessageBuffer;
-    private readonly WsOptionsSnapshot _config;
+    private readonly WsOptions _config;
     private readonly MessageEnumerator _enumerator;
 
     public MessageEnumeratorTests()
@@ -21,7 +21,7 @@ public class MessageEnumeratorTests
         _mockWebSocket = new Mock<WebSocket>();
         _mockBufferPool = new Mock<ObjectPool<IMessageBuffer>>();
         _mockMessageBuffer = new Mock<IMessageBuffer>();
-        _config = new WsOptionsSnapshot(new WsOptions
+        _config = new WsOptions(new WsConfig
         {
             DefaultBufferSize = 1024,
             MaxBufferSize = 8192

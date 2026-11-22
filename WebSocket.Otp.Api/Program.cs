@@ -96,7 +96,6 @@ var app = builder.Build();
         {
             opt.OnConnected = async (context) =>
             {
-                context.Context.User.GetUserId()
                 await context.Groups.AddAsync("general-chat", context.Connection.Id);
             };
             opt.OnDisconnected = async (context) =>

@@ -1,7 +1,7 @@
 ﻿using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using System.Net.WebSockets;
-using WebSockets.Otp.Abstractions.Connections;
+using WebSockets.Otp.Abstractions.Connection;
 using WebSockets.Otp.Abstractions.Contracts;
 using WebSockets.Otp.Abstractions.Endpoints;
 using WebSockets.Otp.Abstractions.Options;
@@ -16,7 +16,7 @@ public sealed class DefaultConnectionHandler(
     IContextFactory contextFactory, IMessageProcessor messageProcessor, ISerializerStore serializerStore,
     ILogger<DefaultConnectionHandler> logger) : IConnectionHandler
 {
-    public async Task HandleAsync(HttpContext context, WsOptionsSnapshot options)
+    public async Task HandleAsync(HttpContext context, WsOptions options)
     {
         var token = context.RequestAborted;
         if (token.IsCancellationRequested)
@@ -41,7 +41,7 @@ public sealed class DefaultConnectionHandler(
     }
 
     private async Task<IMessageSerializer?> NegotiateAsync(
-       HttpContext context, WebSocket socket, WsOptionsSnapshot options, CancellationToken token)
+       HttpContext context, WebSocket socket, WsOptions options, CancellationToken token)
     {
         var handshakeResult = await handshakeService.HandleAsync(context, socket, options, token);
         if (handshakeResult.IsError)
@@ -61,7 +61,7 @@ public sealed class DefaultConnectionHandler(
 
     private async Task RunSessionAsync(
         IWsConnection connection, IMessageSerializer serializer, HttpContext context,
-        WebSocket socket, WsOptionsSnapshot options, CancellationToken token)
+        WebSocket socket, WsOptions options, CancellationToken token)
     {
         var globalContext = contextFactory.CreateGlobal(connection, context, socket);
         try

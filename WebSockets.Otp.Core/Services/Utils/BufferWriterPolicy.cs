@@ -4,7 +4,7 @@ using WebSockets.Otp.Abstractions.Options;
 
 namespace WebSockets.Otp.Core.Services.Utils;
 
-public sealed class BufferWriterPolicy(WsOptions options) : PooledObjectPolicy<ArrayBufferWriter<byte>>
+public sealed class BufferWriterPolicy(WsConfig options) : PooledObjectPolicy<ArrayBufferWriter<byte>>
 {
     public override ArrayBufferWriter<byte> Create() => new(initialCapacity: 1024);
 

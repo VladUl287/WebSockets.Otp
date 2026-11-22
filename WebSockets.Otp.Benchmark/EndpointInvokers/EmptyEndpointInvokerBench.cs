@@ -1,5 +1,4 @@
 ﻿using BenchmarkDotNet.Attributes;
-using WebSockets.Otp.Abstractions;
 using WebSockets.Otp.Abstractions.Endpoints;
 using WebSockets.Otp.Core.Models;
 using WebSockets.Otp.Core.Services.Endpoints;

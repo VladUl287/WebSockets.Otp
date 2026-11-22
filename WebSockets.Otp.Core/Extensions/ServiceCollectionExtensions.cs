@@ -6,9 +6,8 @@ using System.Reflection;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using WebSockets.Otp.Abstractions;
 using WebSockets.Otp.Abstractions.Attributes;
-using WebSockets.Otp.Abstractions.Connections;
+using WebSockets.Otp.Abstractions.Connection;
 using WebSockets.Otp.Abstractions.Contracts;
 using WebSockets.Otp.Abstractions.Endpoints;
 using WebSockets.Otp.Abstractions.Options;
@@ -26,23 +25,23 @@ namespace WebSockets.Otp.Core.Extensions;
 
 public static class ServiceCollectionExtensions
 {
-    public static IServiceCollection AddWsEndpoints(this IServiceCollection services, Action<WsOptions> configure, Assembly[] assemblies)
+    public static IServiceCollection AddWsEndpoints(this IServiceCollection services, Action<WsConfig> configure, Assembly[] assemblies)
     {
-        var options = new WsOptions();
+        var options = new WsConfig();
         configure(options);
         return services.AddWsEndpointsCore(options, assemblies);
     }
 
-    public static IServiceCollection AddWsEndpoints(this IServiceCollection services, WsOptions options, Assembly[] assemblies) =>
+    public static IServiceCollection AddWsEndpoints(this IServiceCollection services, WsConfig options, Assembly[] assemblies) =>
         services.AddWsEndpointsCore(options, assemblies);
 
     public static IServiceCollection AddWsEndpoints(this IServiceCollection services, Assembly[] assemblies) =>
         services.AddWsEndpointsCore(new(), assemblies);
 
-    public static IServiceCollection AddWsEndpoints(this IServiceCollection services, Action<WsOptions> configure) =>
+    public static IServiceCollection AddWsEndpoints(this IServiceCollection services, Action<WsConfig> configure) =>
         services.AddWsEndpoints(configure, [Assembly.GetCallingAssembly()]);
 
-    public static IServiceCollection AddWsEndpoints(this IServiceCollection services, WsOptions options) =>
+    public static IServiceCollection AddWsEndpoints(this IServiceCollection services, WsConfig options) =>
         services.AddWsEndpoints(options, [Assembly.GetCallingAssembly()]);
 
     public static IServiceCollection AddWsEndpoints(this IServiceCollection services) =>
@@ -55,7 +54,7 @@ public static class ServiceCollectionExtensions
         return services.AddSingleton<IMessageSerializer>(new JsonMessageSerializer(jsonOptions));
     }
 
-    private static IServiceCollection AddWsEndpointsCore(this IServiceCollection services, WsOptions options, Assembly[] assemblies)
+    private static IServiceCollection AddWsEndpointsCore(this IServiceCollection services, WsConfig options, Assembly[] assemblies)
     {
         services.AddSingleton(options);
         services.AddTransport(options);
@@ -68,7 +67,7 @@ public static class ServiceCollectionExtensions
         return services;
     }
 
-    private static IServiceCollection AddTransport(this IServiceCollection services, WsOptions options)
+    private static IServiceCollection AddTransport(this IServiceCollection services, WsConfig options)
     {
         services.AddSingleton<ObjectPoolProvider, DefaultObjectPoolProvider>();
         services.AddSingleton(serviceProvider =>

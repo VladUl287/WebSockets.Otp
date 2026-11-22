@@ -20,7 +20,7 @@ public class ParallelMessageProcessorTests
     private readonly ParallelMessageProcessor _processor;
     private readonly Mock<IGlobalContext> _mockGlobalContext;
     private readonly Mock<IMessageSerializer> _mockSerializer;
-    private readonly WsOptionsSnapshot _options;
+    private readonly WsOptions _options;
 
     public ParallelMessageProcessorTests()
     {
@@ -36,7 +36,7 @@ public class ParallelMessageProcessorTests
             NullLogger<ParallelMessageProcessor>.Instance
         );
 
-        _options = new WsOptionsSnapshot(new WsOptions
+        _options = new WsOptions(new WsConfig
         {
             MaxDegreeOfParallelism = Environment.ProcessorCount,
             ShrinkBuffer = true,
@@ -153,7 +153,7 @@ public class ParallelMessageProcessorTests
         var token = CancellationToken.None;
         var maxDegree = 2;
 
-        var options = new WsOptionsSnapshot(new WsOptions()
+        var options = new WsOptions(new WsConfig()
         {
             MaxDegreeOfParallelism = maxDegree,
         });

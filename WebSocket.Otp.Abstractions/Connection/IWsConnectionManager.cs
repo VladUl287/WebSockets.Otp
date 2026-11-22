@@ -1,6 +1,4 @@
-﻿using WebSockets.Otp.Abstractions.Options;
-
-namespace WebSockets.Otp.Abstractions.Connections;
+﻿namespace WebSockets.Otp.Abstractions.Connection;
 
 public interface IWsConnectionManager
 {

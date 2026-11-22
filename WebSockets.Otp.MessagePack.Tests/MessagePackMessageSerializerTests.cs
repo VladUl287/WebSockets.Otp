@@ -3,7 +3,7 @@ using MessagePack.Resolvers;
 using System.Buffers;
 using System.Net.WebSockets;
 using System.Text;
-using WebSockets.Otp.Abstractions.Options;
+using WebSockets.Otp.Abstractions.Connection;
 
 namespace WebSockets.Otp.MessagePack.Tests;
 
@@ -108,7 +108,7 @@ public sealed class MessagePackMessageSerializerTests
     [Fact]
     public void Serialize_AlwaysWritesThreeElements()
     {
-        var types = new (WsMessage, string)[]
+        var types = new (MessageHeaders, string)[]
         {
             (Response(1, 1), "response"),
             (Error(1, "e"), "error"),

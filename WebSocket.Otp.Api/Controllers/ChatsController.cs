@@ -1,7 +1,7 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using WebSockets.Otp.Abstractions.Connections;
+using WebSockets.Otp.Abstractions.Connection;
 using WebSockets.Otp.Abstractions.Serializers;
 using WebSockets.Otp.Api.Database;
 using WebSockets.Otp.Api.Endpoints;

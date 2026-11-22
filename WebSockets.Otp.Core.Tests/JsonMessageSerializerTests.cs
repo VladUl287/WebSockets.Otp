@@ -2,7 +2,7 @@
 using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
-using WebSockets.Otp.Abstractions.Options;
+using WebSockets.Otp.Abstractions.Connection;
 using WebSockets.Otp.Core.Services.Serializers;
 
 namespace WebSockets.Otp.Core.Tests.Serializers;
@@ -123,7 +123,7 @@ public sealed class JsonMessageSerializerTests
     {
         var s = NewSerializer();
 
-        foreach (var (msg, label) in new (WsMessage, string)[]
+        foreach (var (msg, label) in new (MessageHeaders, string)[]
         {
             (Response(1, new { }), "response"),
             (Error(1, "e"), "error"),

@@ -1,6 +1,6 @@
 ﻿using System.Diagnostics.CodeAnalysis;
 
-namespace WebSockets.Otp.Abstractions.Utils;
+namespace WebSockets.Otp.Abstractions.Endpoints;
 
 public readonly record struct EndpointResult<T>
 {

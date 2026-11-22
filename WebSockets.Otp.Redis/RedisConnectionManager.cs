@@ -3,8 +3,7 @@ using MessagePack.Resolvers;
 using StackExchange.Redis;
 using System.Buffers;
 using System.Collections.Concurrent;
-using WebSockets.Otp.Abstractions.Connections;
-using WebSockets.Otp.Abstractions.Options;
+using WebSockets.Otp.Abstractions.Connection;
 
 namespace WebSockets.Otp.Redis;
 

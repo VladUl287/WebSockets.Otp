@@ -1,4 +1,4 @@
-﻿namespace WebSockets.Otp.Abstractions.Options;
+﻿namespace WebSockets.Otp.Abstractions.Connection;
 
 public readonly record struct MessageHeaders(
     uint Id,

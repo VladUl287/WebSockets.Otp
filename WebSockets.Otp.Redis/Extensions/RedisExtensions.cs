@@ -1,5 +1,5 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
-using WebSockets.Otp.Abstractions.Connections;
+using WebSockets.Otp.Abstractions.Connection;
 
 namespace WebSockets.Otp.Redis.Extensions;
 

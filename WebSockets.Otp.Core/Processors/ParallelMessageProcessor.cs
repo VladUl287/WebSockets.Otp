@@ -9,7 +9,7 @@ namespace WebSockets.Otp.Core.Processors;
 public sealed class ParallelMessageProcessor(IMessageDispatcher dispatcher, IMessageEnumerator enumerator) : IMessageProcessor
 {
     public async Task Process(
-        IGlobalContext context, IMessageSerializer serializer, WsOptionsSnapshot options, CancellationToken token)
+        IGlobalContext context, IMessageSerializer serializer, WsOptions options, CancellationToken token)
     {
         var parallelOptions = new ParallelOptions
         {

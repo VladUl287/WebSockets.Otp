@@ -1,6 +1,4 @@
-﻿using WebSockets.Otp.Abstractions.Endpoints;
-
-namespace WebSockets.Otp.Abstractions;
+﻿namespace WebSockets.Otp.Abstractions.Endpoints;
 
 public interface IWsEndpoint
 { }

@@ -1,6 +1,6 @@
-﻿using WebSockets.Otp.Abstractions.Connections;
+﻿using WebSockets.Otp.Abstractions.Connection;
 
-namespace WebSockets.Otp.Abstractions;
+namespace WebSockets.Otp.Abstractions.Utils.Managers;
 
 public readonly struct GroupManager(IWsConnectionManager manager)
 {

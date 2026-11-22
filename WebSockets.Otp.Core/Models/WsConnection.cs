@@ -1,5 +1,5 @@
 ﻿using System.Net.WebSockets;
-using WebSockets.Otp.Abstractions.Connections;
+using WebSockets.Otp.Abstractions.Connection;
 using WebSockets.Otp.Abstractions.Serializers;
 
 namespace WebSockets.Otp.Core.Models;

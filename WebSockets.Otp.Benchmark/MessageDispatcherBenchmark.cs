@@ -11,9 +11,8 @@ using Microsoft.IdentityModel.Tokens;
 using System.Net.WebSockets;
 using System.Security.Claims;
 using System.Text;
-using WebSockets.Otp.Abstractions;
 using WebSockets.Otp.Abstractions.Attributes;
-using WebSockets.Otp.Abstractions.Connections;
+using WebSockets.Otp.Abstractions.Connection;
 using WebSockets.Otp.Abstractions.Contracts;
 using WebSockets.Otp.Abstractions.Endpoints;
 using WebSockets.Otp.Abstractions.Options;
@@ -87,7 +86,7 @@ public class MessageDispatcherBenchmark
 
         _dispatcher = scopedProvider.GetRequiredService<IMessageDispatcher>();
         var contextFactory = scopedProvider.GetRequiredService<IContextFactory>();
-        var options = scopedProvider.GetRequiredService<WsOptions>();
+        var options = scopedProvider.GetRequiredService<WsConfig>();
         var ctx = Create(scopedProvider);
         var connectionFactory = scopedProvider.GetRequiredService<IWsConnectionFactory>();
 

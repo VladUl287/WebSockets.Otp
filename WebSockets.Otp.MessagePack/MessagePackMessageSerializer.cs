@@ -1,7 +1,7 @@
 ﻿using MessagePack;
 using System.Buffers;
 using System.Net.WebSockets;
-using WebSockets.Otp.Abstractions.Options;
+using WebSockets.Otp.Abstractions.Connection;
 using WebSockets.Otp.Abstractions.Serializers;
 
 namespace WebSockets.Otp.MessagePack;

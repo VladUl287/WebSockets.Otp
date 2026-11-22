@@ -3,9 +3,8 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
-using WebSockets.Otp.Abstractions.Connections;
+using WebSockets.Otp.Abstractions.Connection;
 using WebSockets.Otp.Abstractions.Endpoints;
-using WebSockets.Otp.Abstractions.Options;
 using WebSockets.Otp.Abstractions.Serializers;
 using WebSockets.Otp.Abstractions.Transport;
 using WebSockets.Otp.Abstractions.Utils;
@@ -120,9 +119,9 @@ public sealed class DefaultMessageDispatcherTests
                 .Returns(EndpointContext.Object);
     }
 
-    private static Outcome<Success, string> SuccessResult() => new Success();
+    private static Result<Success, string> SuccessResult() => new Success();
 
-    private static Outcome<Success, string> ErrorResult(string error) => error;
+    private static Result<Success, string> ErrorResult(string error) => error;
 
     private static CancellationToken None => CancellationToken.None;
 
@@ -239,7 +238,7 @@ public sealed class DefaultMessageDispatcherTests
 
         f.Invoker.Verify(i => i.Invoke(It.IsAny<object>(), f.EndpointContext.Object), Times.Once);
         f.Manager.Verify(m => m.Send(
-            It.IsAny<string>(), It.IsAny<WsMessage>(), It.IsAny<CancellationToken>()), Times.Never);
+            It.IsAny<string>(), It.IsAny<MessageHeaders>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -271,7 +270,7 @@ public sealed class DefaultMessageDispatcherTests
             f.GlobalContext.Object, f.Serializer.Object, f.Payload.Object, None);
 
         f.Manager.Verify(m => m.Send(
-            It.IsAny<string>(), It.IsAny<WsMessage>(), It.IsAny<CancellationToken>()),
+            It.IsAny<string>(), It.IsAny<MessageHeaders>(), It.IsAny<CancellationToken>()),
             Times.Never);
     }
 
@@ -289,7 +288,7 @@ public sealed class DefaultMessageDispatcherTests
 
         f.Manager.Verify(m => m.Send(
             "conn-1",
-            It.Is<WsMessage>(m => m is ErrorMessage),
+            It.Is<MessageHeaders>(m => m is ErrorMessage),
             It.IsAny<CancellationToken>()),
             Times.Once);
     }

@@ -1,7 +1,7 @@
 ﻿using System.Net.WebSockets;
 using WebSockets.Otp.Abstractions.Serializers;
 
-namespace WebSockets.Otp.Abstractions.Connections;
+namespace WebSockets.Otp.Abstractions.Connection;
 
 public interface IWsConnectionFactory
 {

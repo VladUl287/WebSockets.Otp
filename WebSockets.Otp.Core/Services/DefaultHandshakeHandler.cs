@@ -18,8 +18,8 @@ public sealed class DefaultHandshakeHandler(
     private const string Protocol = "json";
     private static readonly ReadOnlyMemory<byte> ResponseBytes = "{}"u8.ToArray();
 
-    public async ValueTask<Outcome<HandshakeOptions, Error>> HandleAsync(
-        HttpContext context, WebSocket socket, WsOptionsSnapshot options, CancellationToken token)
+    public async ValueTask<Result<WsHandshakeOptions, Error>> HandleAsync(
+        HttpContext context, WebSocket socket, WsOptions options, CancellationToken token)
     {
         var requestId = new RequestId(context);
 
@@ -40,7 +40,7 @@ public sealed class DefaultHandshakeHandler(
                 return new Error();
             }
 
-            var handshakeOptions = serializer.Deserialize<HandshakeOptions>(handshakeBuffer.Memory);
+            var handshakeOptions = serializer.Deserialize<WsHandshakeOptions>(handshakeBuffer.Memory);
             if (handshakeOptions is null)
             {
                 logger.HandshakeDeserializeFailed(requestId);

@@ -2,7 +2,7 @@
 using StackExchange.Redis;
 using System.Net.WebSockets;
 using System.Text.Json;
-using WebSockets.Otp.Abstractions.Connections;
+using WebSockets.Otp.Abstractions.Connection;
 using WebSockets.Otp.Abstractions.Options;
 using WebSockets.Otp.Abstractions.Serializers;
 

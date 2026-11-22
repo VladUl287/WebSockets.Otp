@@ -4,7 +4,7 @@ using WebSockets.Otp.Abstractions.Transport;
 
 namespace WebSockets.Otp.Core.Services.Utils;
 
-public sealed class NativeChunkedBufferPolicy(WsOptions options) : IPooledObjectPolicy<IMessageBuffer>
+public sealed class NativeChunkedBufferPolicy(WsConfig options) : IPooledObjectPolicy<IMessageBuffer>
 {
     public IMessageBuffer Create() => new NativeChunkedBuffer(options.DefaultBufferSize);
 

@@ -1,6 +1,7 @@
 ﻿using System.Net.WebSockets;
 using Microsoft.AspNetCore.Http;
-using WebSockets.Otp.Abstractions.Connections;
+using WebSockets.Otp.Abstractions.Connection;
+using WebSockets.Otp.Abstractions.Utils.Managers;
 
 namespace WebSockets.Otp.Abstractions.Endpoints;
 
