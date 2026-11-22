@@ -8,7 +8,6 @@ using WebSockets.Otp.Abstractions.Options;
 using WebSockets.Otp.Abstractions.Serializers;
 using WebSockets.Otp.Abstractions.Transport;
 using WebSockets.Otp.Core.Logging;
-using WebSockets.Otp.Core.Utils;
 
 namespace WebSockets.Otp.Core.Services;
 
@@ -29,16 +28,14 @@ public sealed class DefaultConnectionHandler(
         if (serializer is null)
             return;
 
-        var requestId = new RequestId(context);
-
         var connection = connectionFactory.Create(socket, serializer);
         if (!await connectionManager.TryAdd(connection, token))
         {
-            logger.ConnectionAddFailed(connection.Id, requestId);
+            logger.ConnectionAddFailed(connection.Id, context);
             return;
         }
 
-        logger.ConnectionEstablished(connection.Id, requestId);
+        logger.ConnectionEstablished(connection.Id, context);
 
         await RunSessionAsync(connection, serializer, context, socket, options, token);
     }
