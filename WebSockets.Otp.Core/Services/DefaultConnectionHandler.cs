@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
+using System.Net.WebSockets;
 using WebSockets.Otp.Abstractions.Connections;
 using WebSockets.Otp.Abstractions.Contracts;
 using WebSockets.Otp.Abstractions.Endpoints;
@@ -12,37 +13,25 @@ using WebSockets.Otp.Core.Utils;
 namespace WebSockets.Otp.Core.Services;
 
 public sealed class DefaultConnectionHandler(
-    IWsConnectionManager connectionManager, IWsConnectionFactory connectionFactory, IHandshakeHandler hanshakeService,
+    IWsConnectionManager connectionManager, IWsConnectionFactory connectionFactory, IHandshakeHandler handshakeService,
     IContextFactory contextFactory, IMessageProcessor messageProcessor, ISerializerStore serializerStore,
     ILogger<DefaultConnectionHandler> logger) : IConnectionHandler
 {
     public async Task HandleAsync(HttpContext context, WsOptionsSnapshot options)
     {
         var token = context.RequestAborted;
-
         if (token.IsCancellationRequested)
+            return;
+
+        using var socket = await context.WebSockets.AcceptWebSocketAsync();
+
+        var serializer = await NegotiateAsync(context, socket, options, token);
+        if (serializer is null)
             return;
 
         var requestId = new RequestId(context);
 
-        using var socket = await context.WebSockets.AcceptWebSocketAsync();
-
-        var handshakeResult = await hanshakeService.HandleAsync(context, socket, options, token);
-        if (handshakeResult.IsError)
-            return;
-
-        var handshakeOptions = handshakeResult.Value;
-
-        logger.HandshakeCompleted(handshakeOptions.Protocol, requestId);
-
-        if (!serializerStore.TryGet(handshakeOptions.Protocol, out var serializer))
-        {
-            logger.SerializerNotFound(handshakeOptions.Protocol, requestId);
-            return;
-        }
-
         var connection = connectionFactory.Create(socket, serializer);
-
         if (!await connectionManager.TryAdd(connection, token))
         {
             logger.ConnectionAddFailed(connection.Id, requestId);
@@ -51,6 +40,32 @@ public sealed class DefaultConnectionHandler(
 
         logger.ConnectionEstablished(connection.Id, requestId);
 
+        await RunSessionAsync(connection, serializer, context, socket, options, token);
+    }
+
+    private async Task<IMessageSerializer?> NegotiateAsync(
+       HttpContext context, WebSocket socket, WsOptionsSnapshot options, CancellationToken token)
+    {
+        var handshakeResult = await handshakeService.HandleAsync(context, socket, options, token);
+        if (handshakeResult.IsError)
+            return null;
+
+        var protocol = handshakeResult.Value.Protocol;
+        logger.HandshakeCompleted(protocol, context);
+
+        if (!serializerStore.TryGet(protocol, out var serializer))
+        {
+            logger.SerializerNotFound(protocol, context);
+            return null;
+        }
+
+        return serializer;
+    }
+
+    private async Task RunSessionAsync(
+        IWsConnection connection, IMessageSerializer serializer, HttpContext context,
+        WebSocket socket, WsOptionsSnapshot options, CancellationToken token)
+    {
         var globalContext = contextFactory.CreateGlobal(connection, context, socket);
         try
         {
