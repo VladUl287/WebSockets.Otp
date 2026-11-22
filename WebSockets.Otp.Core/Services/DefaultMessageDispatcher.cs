@@ -53,15 +53,11 @@ public class DefaultMessageDispatcher(
     private bool TryResolveEndpoint(MessageHeaders headers, [NotNullWhen(true)] out WsEndpointInfo? endpoint)
     {
         endpoint = null;
-
-        var keySlice = headers.Key;
-
-        if (keySlice.IsEmpty || !endpointResolver.TryResolve(keySlice, out endpoint))
+        if (headers.Key.IsEmpty || !endpointResolver.TryResolve(headers.Key, out endpoint))
         {
             logger.KeyFieldMissing();
             return false;
         }
-
         return true;
     }
 
