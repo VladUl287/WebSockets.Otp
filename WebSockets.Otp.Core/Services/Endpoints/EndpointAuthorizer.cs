@@ -15,21 +15,16 @@ public sealed class EndpointAuthorizer(ILogger<EndpointAuthorizer> logger) : IEn
         if (principal is null)
             return "authorization failed. user not authenticated";
 
-        var endpoint = info.Endpoint;
-
-        if (endpoint is null)
-            return new Success();
-
         var services = context.RequestServices;
 
         var policy = await info.GetOrComputePolicy((info, sp) =>
         {
-            var endpoint = info.Endpoint;
+            var endpoint = info.Metadata;
 
             if (endpoint is null)
                 return Task.FromResult<AuthorizationPolicy?>(null);
 
-            var authorizeData = endpoint.Metadata.GetOrderedMetadata<IAuthorizeData>();
+            var authorizeData = endpoint.GetOrderedMetadata<IAuthorizeData>();
             if (authorizeData.Count == 0)
                 return Task.FromResult<AuthorizationPolicy?>(null);
 

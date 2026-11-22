@@ -1,24 +1,21 @@
-﻿using Microsoft.AspNetCore.Http;
-using System.Net.WebSockets;
+﻿using System.Net.WebSockets;
+using Microsoft.AspNetCore.Http;
 using WebSockets.Otp.Abstractions.Connection;
 using WebSockets.Otp.Abstractions.Endpoints;
-using WebSockets.Otp.Abstractions.Utils.Managers;
 
 namespace WebSockets.Otp.Core.Models;
 
 public sealed class GlobalContext(
-    HttpContext httpContext,
-    WebSocket socket,
     IWsConnection connection,
-    IWsConnectionManager manager) : IGlobalContext
+    IWsConnectionManager manager,
+    HttpContext context,
+    WebSocket socket) : IGlobalContext
 {
-    private readonly IWsConnectionManager _connectionManager = manager;
-
-    public HttpContext Context { get; init; } = httpContext;
-
-    public WebSocket Socket { get; init; } = socket;
-
     public IWsConnection Connection => connection;
 
-    public GroupManager Groups => new(_connectionManager);
+    public IWsConnectionManager Manager => manager;
+
+    public HttpContext Context => context;
+
+    public WebSocket Socket => socket;
 }

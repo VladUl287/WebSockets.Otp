@@ -51,7 +51,7 @@ public sealed class EndpointAuthorizerTests : IClassFixture<EndpointAuthorizerFi
     {
         return new WsEndpointInfo
         {
-            EndpointType = typeof(object),
+            Type = typeof(object),
             Key = "",
             Invoker = null,
             Endpoint = new(

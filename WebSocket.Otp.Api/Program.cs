@@ -96,11 +96,11 @@ var app = builder.Build();
         {
             opt.OnConnected = async (context) =>
             {
-                await context.Groups.AddAsync("general-chat", context.Connection.Id);
+                //await context.Group.AddAsync("general-chat", context.Connection.Id);
             };
             opt.OnDisconnected = async (context) =>
             {
-                await context.Groups.RemoveAsync("general-chat", context.Connection.Id);
+                //await context.Group.RemoveAsync("general-chat", context.Connection.Id);
             };
         });
 

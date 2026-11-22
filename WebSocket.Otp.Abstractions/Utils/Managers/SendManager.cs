@@ -1,7 +1,6 @@
 ﻿using WebSockets.Otp.Abstractions.Connection;
-using WebSockets.Otp.Abstractions.Options;
 
-namespace WebSockets.Otp.Abstractions;
+namespace WebSockets.Otp.Abstractions.Utils.Managers;
 
 public sealed class SendManager(IWsConnectionManager manager)
 {

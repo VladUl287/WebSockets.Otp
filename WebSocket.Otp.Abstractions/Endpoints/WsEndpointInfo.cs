@@ -1,12 +1,16 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.DependencyInjection;
+using System.Diagnostics.CodeAnalysis;
 
 namespace WebSockets.Otp.Abstractions.Endpoints;
 
 public sealed class WsEndpointInfo
 {
     public required string Key { get; init; }
-    public required Type EndpointType { get; init; }
+    public required ServiceLifetime Scope { get; init; }
+    public required Type Type { get; init; }
+    public required EndpointMetadataCollection Metadata { get; init; }
     public required IEndpointInvoker Invoker { get; init; }
 
 #if NET9_0_OR_GREATER
@@ -18,10 +22,6 @@ public sealed class WsEndpointInfo
     private Task<AuthorizationPolicy?>? _policyTask;
     private AuthorizationPolicy? _policy;
     private volatile bool _policySet;
-
-    public Endpoint? Endpoint { get; init; }
-    public AuthorizationPolicy? Policy => _policy;
-    public bool IsPolicySet => _policySet;
 
     public ValueTask<AuthorizationPolicy?> GetOrComputePolicy(
         Func<WsEndpointInfo, IServiceProvider, Task<AuthorizationPolicy?>> factory, IServiceProvider provider)

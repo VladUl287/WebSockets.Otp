@@ -195,12 +195,10 @@ public static class ServiceCollectionExtensions
                 return new WsEndpointInfo
                 {
                     Key = endpointAttr!.Key,
-                    EndpointType = t,
-                    Invoker = invoker,
-                    Endpoint = authAttrs?.Count() is > 0 ? new Endpoint(
-                        requestDelegate: null,
-                        metadata: new EndpointMetadataCollection(authAttrs),
-                        displayName: "ws-auth") : null
+                    Scope = endpointAttr.Scope,
+                    Type = t,
+                    Metadata = authAttrs?.Count() is > 0 ? new EndpointMetadataCollection(authAttrs) : [],
+                    Invoker = invoker
                 };
             });
 

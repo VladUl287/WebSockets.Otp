@@ -73,7 +73,7 @@ public class DefaultMessageDispatcher(
         IServiceProvider services, IGlobalContext context, MessageHeaders messageHeader,
         WsEndpointInfo endpointInfo, CancellationToken token)
     {
-        if (endpointInfo.Endpoint is null)
+        if (endpointInfo.Metadata.Count > 0)
             return true;
 
         var authorizer = services.GetRequiredService<IEndpointAuthorizer>();
@@ -94,11 +94,11 @@ public class DefaultMessageDispatcher(
     }
 
     private async Task InvokeEndpointAsync(
-        IServiceProvider services, IGlobalContext context, MessageHeaders messageHeader,
+        IServiceProvider services, IGlobalContext context, MessageHeaders messageHeaders,
         WsEndpointInfo endpointInfo, CancellationToken token)
     {
-        var endpoint = services.GetRequiredService(endpointInfo.EndpointType);
-        var endpointContext = contextFactory.Create(messageHeader.Id, context, messageHeader.Value, token);
+        var endpoint = services.GetRequiredService(endpointInfo.Type);
+        var endpointContext = contextFactory.Create(context, services, endpointInfo, messageHeaders, token);
         await endpointInfo.Invoker.Invoke(endpoint, endpointContext);
     }
 }

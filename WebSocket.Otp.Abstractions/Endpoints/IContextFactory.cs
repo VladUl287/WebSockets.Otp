@@ -7,6 +7,6 @@ namespace WebSockets.Otp.Abstractions.Endpoints;
 public interface IContextFactory
 {
     IGlobalContext CreateGlobal(IWsConnection connection, HttpContext context, WebSocket socket);
-
-    IEndpointContext Create(uint correlationId, IGlobalContext global, ReadOnlyMemory<byte> data, CancellationToken token);
+    IEndpointContext Create(
+        IGlobalContext global, IServiceProvider services, WsEndpointInfo endpoint, MessageHeaders headers, CancellationToken token);
 }

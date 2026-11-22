@@ -78,7 +78,7 @@ public sealed class DefaultMessageDispatcherTests
             {
                 Key = string.Empty,
                 Endpoint = withEndpoint ? new(_ => Task.CompletedTask, EndpointMetadataCollection.Empty, "test-auth") : null,
-                EndpointType = typeof(TestEndpoint),
+                Type = typeof(TestEndpoint),
                 Invoker = Invoker.Object
             };
 

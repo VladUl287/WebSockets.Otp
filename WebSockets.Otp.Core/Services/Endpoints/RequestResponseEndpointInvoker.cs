@@ -14,14 +14,15 @@ public sealed class RequestResponseEndpointInvoker<TRequest, TResponse> : IEndpo
 
         var connection = context.Connection;
         var serializer = connection.Serializer;
-        var payload = context.Payload;
+        var payload = context.Message;
 
+        var correlationId = context.MessageHeaders.Id;
         var request = serializer.Deserialize<TRequest>(payload);
         if (request is null)
         {
             var envelope = new ErrorMessage(
-                context.CorrelationId, WsErrorCode.InvalidPayload, $"Deserialization returned null for {typeof(TRequest).Name} at endpoint {endpoint.GetType().Name}.");
-            await context.Manager.Send(connection.Id, envelope, context.Cancellation);
+                correlationId, WsErrorCode.InvalidPayload, $"Deserialization returned null for {typeof(TRequest).Name} at endpoint {endpoint.GetType().Name}.");
+            await context.Manager.Send(connection.Id, envelope, context.Token);
             return;
         }
 
@@ -33,23 +34,23 @@ public sealed class RequestResponseEndpointInvoker<TRequest, TResponse> : IEndpo
             {
                 if (result.IsError)
                 {
-                    var error = new ErrorMessage(context.CorrelationId, WsErrorCode.HandlerFailed, result.Error);
-                    await context.Manager.Send(connection.Id, error, context.Cancellation);
+                    var error = new ErrorMessage(correlationId, WsErrorCode.HandlerFailed, result.Error);
+                    await context.Manager.Send(connection.Id, error, context.Token);
                 }
                 if (result.IsSuccess)
                 {
-                    var value = new ResponseMessage(context.CorrelationId, result.Value);
-                    await context.Manager.Send(connection.Id, value, context.Cancellation);
+                    var value = new ResponseMessage(correlationId, result.Value);
+                    await context.Manager.Send(connection.Id, value, context.Token);
                 }
             }
 
-            var envelope = new ResponseMessage(context.CorrelationId, response);
-            await context.Manager.Send(connection.Id, envelope, context.Cancellation);
+            var envelope = new ResponseMessage(correlationId, response);
+            await context.Manager.Send(connection.Id, envelope, context.Token);
         }
         catch (Exception ex)
         {
-            var envelope = new ErrorMessage(context.CorrelationId, WsErrorCode.HandlerFailed, ex.Message);
-            await context.Manager.Send(connection.Id, envelope, context.Cancellation);
+            var envelope = new ErrorMessage(correlationId, WsErrorCode.HandlerFailed, ex.Message);
+            await context.Manager.Send(connection.Id, envelope, context.Token);
         }
     }
 }

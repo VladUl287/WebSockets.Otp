@@ -9,8 +9,9 @@ namespace WebSockets.Otp.Core.Services;
 public sealed class DefaultContextFactory(IWsConnectionManager manager) : IContextFactory
 {
     public IGlobalContext CreateGlobal(IWsConnection connection, HttpContext context, WebSocket socket) => 
-        new GlobalContext(context, socket, connection, manager);
+        new GlobalContext(connection, manager, context, socket);
 
-    public IEndpointContext Create(uint correlationId, IGlobalContext global, ReadOnlyMemory<byte> data, CancellationToken token) => 
-        new EndpointContext(correlationId, global, manager, data, token);
+    public IEndpointContext Create(
+        IGlobalContext global, IServiceProvider services, WsEndpointInfo endpoint, MessageHeaders headers, CancellationToken token) => 
+        new EndpointContext(global, services, endpoint, headers, token);
 }
