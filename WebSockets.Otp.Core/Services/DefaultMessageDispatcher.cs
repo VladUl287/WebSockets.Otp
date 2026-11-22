@@ -16,7 +16,8 @@ public class DefaultMessageDispatcher(
     IServiceScopeFactory scopeFactory, IContextFactory contextFactory, ITrieResolver<WsEndpointInfo> endpointResolver,
     IWsConnectionManager manager, ILogger<DefaultMessageDispatcher> logger) : IMessageDispatcher
 {
-    public async Task DispatchMessage(IGlobalContext context, IMessageSerializer serializer, IMessageBuffer payload, CancellationToken token)
+    public async Task DispatchMessage(
+        IGlobalContext context, IMessageSerializer serializer, IMessageBuffer payload, CancellationToken token)
     {
         var headers = serializer.ReadHeaders(payload.Memory);
 
@@ -65,7 +66,7 @@ public class DefaultMessageDispatcher(
     }
 
     private async Task<bool> TryAuthorizeAsync(
-        IServiceProvider services, IGlobalContext context, MessageHeaders messageHeader,
+        IServiceProvider services, IGlobalContext context, MessageHeaders headers,
         WsEndpointInfo endpointInfo, CancellationToken token)
     {
         if (endpointInfo.Metadata.Count > 0)
@@ -80,17 +81,17 @@ public class DefaultMessageDispatcher(
         logger.AuthorizationFailed(result.Error);
 
         await manager.TrySendErrorAsync(
-            context.Connection.Id, messageHeader.CorrelationId, WsErrorCode.Unauthorized, result.Error, token);
+            context.Connection.Id, headers.CorrelationId, WsErrorCode.Unauthorized, result.Error, token);
 
         return false;
     }
 
     private async Task InvokeEndpointAsync(
-        IServiceProvider services, IGlobalContext context, MessageHeaders messageHeaders,
+        IServiceProvider services, IGlobalContext context, MessageHeaders headers,
         WsEndpointInfo endpointInfo, CancellationToken token)
     {
         var endpoint = services.GetRequiredService(endpointInfo.Type);
-        var endpointContext = contextFactory.Create(context, services, endpointInfo, messageHeaders, token);
+        var endpointContext = contextFactory.Create(context, services, endpointInfo, headers, token);
         await endpointInfo.Invoker.Invoke(endpoint, endpointContext);
     }
 }
