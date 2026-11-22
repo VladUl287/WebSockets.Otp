@@ -1,25 +1,41 @@
-﻿using System.Diagnostics.CodeAnalysis;
-
-namespace WebSockets.Otp.Abstractions.Utils;
+﻿namespace WebSockets.Otp.Abstractions.Utils;
 
 public readonly struct Success { }
 public readonly struct Error { }
 
-public readonly struct Result<TSuccess, TError>(int index, TSuccess? success = default, TError? error = default)
+public readonly struct Result<TSuccess, TError>
 {
-    public int Index => index;
+    private readonly TSuccess? _success;
+    private readonly TError? _error;
+    private readonly int _index;
 
-    [MemberNotNullWhen(true, nameof(Value))]
-    [MemberNotNullWhen(false, nameof(Error))]
-    public bool IsSuccess => index == 0;
+    private Result(int index, TSuccess? success = default, TError? error = default)
+    {
+        _index = index;
+        _success = success;
+        _error = error;
+    }
 
-    [MemberNotNullWhen(true, nameof(Error))]
-    [MemberNotNullWhen(false, nameof(Value))]
-    public bool IsError => index == 1;
+    public bool IsSuccess => _index == 1;
+    public bool IsError => _index == 2;
 
-    public TSuccess? Value => success;
-    public TError? Error => error;
+    public TSuccess Value =>
+       _index == 1 ? _success! : throw new InvalidOperationException($"Cannot return as First as result is Second");
+    public TError Error =>
+       _index == 2 ? _error! : throw new InvalidOperationException($"Cannot return as Second as result is First");
 
-    public static implicit operator Result<TSuccess, TError>(TSuccess t) => new(0, t);
-    public static implicit operator Result<TSuccess, TError>(TError t) => new(1, default, t);
+    public static Result<TSuccess, TError> Ok(TSuccess value)
+    {
+        if (value is null) throw new ArgumentNullException(nameof(value));
+        return new(1, value);
+    }
+
+    public static Result<TSuccess, TError> Fail(TError error)
+    {
+        if (error is null) throw new ArgumentNullException(nameof(error));
+        return new(2, default, error);
+    }
+
+    public static implicit operator Result<TSuccess, TError>(TSuccess value) => Ok(value);
+    public static implicit operator Result<TSuccess, TError>(TError error) => Fail(error);
 }
