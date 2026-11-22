@@ -144,7 +144,7 @@ public sealed class JsonMessageSerializerTests
     {
         var h = NewSerializer().ReadHeaders(Utf8("{}"));
 
-        Assert.Equal(0u, h.Id);
+        Assert.Equal(0u, h.CorrelationId);
         Assert.True(h.Key.IsEmpty);
         Assert.True(h.Value.IsEmpty);
     }
@@ -154,7 +154,7 @@ public sealed class JsonMessageSerializerTests
     {
         var h = NewSerializer().ReadHeaders(Utf8("""{"type":1,"id":42}"""));
 
-        Assert.Equal(42u, h.Id);
+        Assert.Equal(42u, h.CorrelationId);
         Assert.True(h.Key.IsEmpty);
         Assert.True(h.Value.IsEmpty);
     }
@@ -164,7 +164,7 @@ public sealed class JsonMessageSerializerTests
     {
         var h = NewSerializer().ReadHeaders(Utf8("""{"type":1,"key":"abc"}"""));
 
-        Assert.Equal(0u, h.Id);
+        Assert.Equal(0u, h.CorrelationId);
         Assert.Equal("abc", Str(h.Key));
         Assert.True(h.Value.IsEmpty);
     }
@@ -174,7 +174,7 @@ public sealed class JsonMessageSerializerTests
     {
         var h = NewSerializer().ReadHeaders(Utf8("""{"type":1,"value":{"x":1}}"""));
 
-        Assert.Equal(0u, h.Id);
+        Assert.Equal(0u, h.CorrelationId);
         Assert.True(h.Key.IsEmpty);
         Assert.Equal("""{"x":1}""", Str(h.Value));
     }
@@ -201,7 +201,7 @@ public sealed class JsonMessageSerializerTests
         var h = NewSerializer().ReadHeaders(
             Utf8("""{"type":1,"id":7,"key":"k","value":[1,2,3]}"""));
 
-        Assert.Equal(7u, h.Id);
+        Assert.Equal(7u, h.CorrelationId);
         Assert.Equal("k", Str(h.Key));
         Assert.Equal("[1,2,3]", Str(h.Value));
     }
@@ -212,7 +212,7 @@ public sealed class JsonMessageSerializerTests
         var h = NewSerializer().ReadHeaders(
             Utf8("""{"value":true,"key":"k","id":1,"type":1}"""));
 
-        Assert.Equal(1u, h.Id);
+        Assert.Equal(1u, h.CorrelationId);
         Assert.Equal("k", Str(h.Key));
         Assert.Equal("true", Str(h.Value));
     }
@@ -223,7 +223,7 @@ public sealed class JsonMessageSerializerTests
         var h = NewSerializer().ReadHeaders(
             Utf8("  {\n  \"id\" : 5 ,\n  \"key\" : \"k\"\n}  "));
 
-        Assert.Equal(5u, h.Id);
+        Assert.Equal(5u, h.CorrelationId);
         Assert.Equal("k", Str(h.Key));
     }
 
@@ -233,7 +233,7 @@ public sealed class JsonMessageSerializerTests
         var h = NewSerializer().ReadHeaders(
             Utf8("""{"type":1,"foo":"bar","id":5,"baz":[1,2]}"""));
 
-        Assert.Equal(5u, h.Id);
+        Assert.Equal(5u, h.CorrelationId);
     }
 
     [Fact]
@@ -242,7 +242,7 @@ public sealed class JsonMessageSerializerTests
         var h = NewSerializer().ReadHeaders(
             Utf8("""{"type":1,"value":{"id":99},"id":7}"""));
 
-        Assert.Equal(7u, h.Id);
+        Assert.Equal(7u, h.CorrelationId);
         Assert.Equal("""{"id":99}""", Str(h.Value));
     }
 
@@ -304,7 +304,7 @@ public sealed class JsonMessageSerializerTests
 
         var h = s.ReadHeaders(buffer.WrittenMemory);
 
-        Assert.Equal(id, h.Id);
+        Assert.Equal(id, h.CorrelationId);
         Assert.Equal("""{"z":3}""", Str(h.Value));
     }
 
@@ -317,7 +317,7 @@ public sealed class JsonMessageSerializerTests
 
         var h = s.ReadHeaders(buffer.WrittenMemory);
 
-        Assert.Equal(11u, h.Id);
+        Assert.Equal(11u, h.CorrelationId);
     }
 
     [Fact]
@@ -349,6 +349,6 @@ public sealed class JsonMessageSerializerTests
 
         var h = s.ReadHeaders(Utf8("""{"type":1,"id":5}"""));
 
-        Assert.Equal(5u, h.Id);
+        Assert.Equal(5u, h.CorrelationId);
     }
 }

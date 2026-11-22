@@ -62,7 +62,7 @@ public sealed class DefaultMessageDispatcherTests
         public static MessageHeaders Headers(uint id, byte[]? key = null, byte[]? value = null)
             => new()
             {
-                Id = id,
+                CorrelationId = id,
                 Key = key ?? [0xAB],
                 Value = value ?? [0xCD]
             };

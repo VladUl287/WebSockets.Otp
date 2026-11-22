@@ -155,7 +155,7 @@ public sealed class MessagePackMessageSerializerTests
         var bytes = BuildHeaders(42, "abc", (ref MessagePackWriter w) => w.WriteInt32(7));
         var h = NewSerializer().ReadHeaders(bytes);
 
-        Assert.Equal(42u, h.Id);
+        Assert.Equal(42u, h.CorrelationId);
         Assert.Equal("abc", Str(h.Key));
         Assert.False(h.Value.IsEmpty);
     }
@@ -165,7 +165,7 @@ public sealed class MessagePackMessageSerializerTests
     {
         var h = NewSerializer().ReadHeaders(BuildHeaders(1, "", (ref MessagePackWriter w) => w.Write(0)));
 
-        Assert.Equal(1u, h.Id);
+        Assert.Equal(1u, h.CorrelationId);
         Assert.True(h.Key.IsEmpty);
     }
 
@@ -188,7 +188,7 @@ public sealed class MessagePackMessageSerializerTests
 
         var h = NewSerializer().ReadHeaders(bytes);
 
-        Assert.Equal(1u, h.Id);
+        Assert.Equal(1u, h.CorrelationId);
         Assert.Equal("k", Str(h.Key));
 
         var reader = new MessagePackReader(h.Value);
@@ -224,7 +224,7 @@ public sealed class MessagePackMessageSerializerTests
     public void ReadHeaders_LargeId()
     {
         var h = NewSerializer().ReadHeaders(BuildHeaders(uint.MaxValue, "k", (ref MessagePackWriter w) => w.Write(0)));
-        Assert.Equal(uint.MaxValue, h.Id);
+        Assert.Equal(uint.MaxValue, h.CorrelationId);
     }
 
     [Fact]

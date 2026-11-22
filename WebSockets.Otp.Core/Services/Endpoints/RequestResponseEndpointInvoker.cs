@@ -16,7 +16,7 @@ public sealed class RequestResponseEndpointInvoker<TRequest, TResponse> : IEndpo
         var serializer = connection.Serializer;
         var payload = context.Message;
 
-        var correlationId = context.MessageHeaders.Id;
+        var correlationId = context.MessageHeaders.CorrelationId;
         var request = serializer.Deserialize<TRequest>(payload);
         if (request is null)
         {

@@ -23,9 +23,9 @@ public class DefaultMessageDispatcher(
         {
             if (!TryResolveEndpoint(messageHeader, out var endpointInfo))
             {
-                if (messageHeader.Id != default)
+                if (messageHeader.CorrelationId != default)
                 {
-                    var envelope = new ErrorMessage(messageHeader.Id, WsErrorCode.UnknownRoute, "Endpoint not found");
+                    var envelope = new ErrorMessage(messageHeader.CorrelationId, WsErrorCode.UnknownRoute, "Endpoint not found");
                     await manager.Send(context.Connection.Id, envelope, token);
                 }
                 return;
@@ -46,9 +46,9 @@ public class DefaultMessageDispatcher(
         {
             logger.InternalError(context.Context, ex);
 
-            if (messageHeader.Id != default)
+            if (messageHeader.CorrelationId != default)
             {
-                var envelope = new ErrorMessage(messageHeader.Id, WsErrorCode.Internal, "Internal error");
+                var envelope = new ErrorMessage(messageHeader.CorrelationId, WsErrorCode.Internal, "Internal error");
                 await manager.Send(context.Connection.Id, envelope, token);
             }
         }
@@ -84,9 +84,9 @@ public class DefaultMessageDispatcher(
 
         logger.AuthorizationFailed(result.Error);
 
-        if (messageHeader.Id != default)
+        if (messageHeader.CorrelationId != default)
         {
-            var envelope = new ErrorMessage(messageHeader.Id, WsErrorCode.Unauthorized, result.Error);
+            var envelope = new ErrorMessage(messageHeader.CorrelationId, WsErrorCode.Unauthorized, result.Error);
             await manager.Send(context.Connection.Id, envelope, token);
         }
 
