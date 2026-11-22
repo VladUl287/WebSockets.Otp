@@ -2,6 +2,7 @@
 using WebSockets.Otp.Abstractions;
 using WebSockets.Otp.Abstractions.Endpoints;
 using WebSockets.Otp.Abstractions.Options;
+using WebSockets.Otp.Abstractions.Utils;
 
 namespace WebSockets.Otp.Core.Services.Endpoints;
 
@@ -29,6 +30,21 @@ public sealed class RequestResponseEndpointInvoker<TRequest, TResponse> : IEndpo
         try
         {
             var response = await typedEndpoint.HandleAsync(request, context);
+
+            if (response is EndpointResult<TResponse> result)
+            {
+                if (result.IsError)
+                {
+                    var error = new ErrorMessage(context.CorrelationId, WsErrorCode.HandlerFailed, result.Error);
+                    await context.Manager.Send(connection.Id, error, context.Cancellation);
+                }
+                if (result.IsSuccess)
+                {
+                    var value = new ResponseMessage(context.CorrelationId, result.Value);
+                    await context.Manager.Send(connection.Id, value, context.Cancellation);
+                }
+            }
+
             var envelope = new ResponseMessage(context.CorrelationId, response);
             await context.Manager.Send(connection.Id, envelope, context.Cancellation);
         }

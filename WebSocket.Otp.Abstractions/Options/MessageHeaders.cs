@@ -32,12 +32,12 @@ public enum WsErrorCode
     Internal
 }
 
-public record WsError(WsErrorCode Code, string Message) : WsMessage
+public record WsError(string Message) : WsMessage
 {
     public override MessageType Type => MessageType.Error;
 }
 
-public sealed record ErrorMessage(uint Id, WsErrorCode Code, string Message) : WsError(Code, Message)
+public sealed record ErrorMessage(uint Id, WsErrorCode Code, string Message) : WsError(Message)
 { }
 
 public sealed record EventMessage(string Key, object Value) : WsMessage
