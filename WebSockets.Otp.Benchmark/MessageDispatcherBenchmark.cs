@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Features;
+using Microsoft.Diagnostics.Tracing.Parsers.MicrosoftWindowsTCPIP;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -12,6 +13,7 @@ using System.Security.Claims;
 using System.Text;
 using WebSockets.Otp.Abstractions;
 using WebSockets.Otp.Abstractions.Attributes;
+using WebSockets.Otp.Abstractions.Connections;
 using WebSockets.Otp.Abstractions.Contracts;
 using WebSockets.Otp.Abstractions.Endpoints;
 using WebSockets.Otp.Abstractions.Options;
@@ -33,7 +35,7 @@ public class MessageDispatcherBenchmark
     private IMessageBuffer _buffer = null!;
 
     private static readonly byte[] Frame = Encoding.UTF8.GetBytes(
-        "{\"key\":\"echo1\",\"correlationId\":12324,\"value\":{\"msg\":\"hello\"}}");
+        "{\"key\":\"echo1\",\"id\":12324,\"value\":{\"msg\":\"hello\"}}");
 
     [GlobalSetup]
     public async Task Setup()
@@ -87,9 +89,14 @@ public class MessageDispatcherBenchmark
         var contextFactory = scopedProvider.GetRequiredService<IContextFactory>();
         var options = scopedProvider.GetRequiredService<WsOptions>();
         var ctx = Create(scopedProvider);
-        _globalContext = contextFactory.CreateGlobal(ctx, await ctx.WebSockets.AcceptWebSocketAsync(), "test", new WsOptionsSnapshot(options));
+        var connectionFactory = scopedProvider.GetRequiredService<IWsConnectionFactory>();
+
         var store = scopedProvider.GetRequiredService<ISerializerStore>();
         store.TryGet("json", out _serializer);
+        var socket = await ctx.WebSockets.AcceptWebSocketAsync();
+        var connection = connectionFactory.Create(socket, _serializer);
+
+        _globalContext = contextFactory.CreateGlobal(connection, ctx, socket);
 
         _buffer = new NativeChunkedBuffer(Frame.Length);
         _buffer.Write(Frame);
@@ -132,11 +139,13 @@ public class MessageDispatcherBenchmark
     }
 }
 
+public sealed record Request(string Msg);
+
 [Authorize]
 [WsEndpoint("echo")]
-public class EndpointTest : WsEndpoint<object>
+public class EndpointTest : WsEndpoint<Request>
 {
-    public override Task HandleAsync(object request, EndpointContext context)
+    public override Task HandleAsync(Request request, IEndpointContext context)
     {
         return Task.CompletedTask;
     }

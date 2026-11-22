@@ -28,7 +28,7 @@ public class EmptyEndpointInvokerBench
 
     public sealed class EndpointTest : WsEndpoint
     {
-        public override Task HandleAsync(EndpointContext context)
+        public override Task HandleAsync(IEndpointContext context)
         {
             return Task.CompletedTask;
         }
