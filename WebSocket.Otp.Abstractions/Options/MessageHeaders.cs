@@ -22,7 +22,18 @@ public sealed record ResponseMessage(uint Id, object Value) : WsMessage
     public override MessageType Type => MessageType.Response;
 }
 
-public sealed record ErrorMessage(uint Id, string Error) : WsMessage
+public enum WsErrorCode
+{
+    InvalidPayload,
+    UnknownRoute,
+    HandlerFailed,
+    Timeout,
+    Unauthorized,
+    RateLimited,
+    Internal
+}
+
+public sealed record ErrorMessage(uint Id, WsErrorCode Code, string Message) : WsMessage
 {
     public override MessageType Type => MessageType.Error;
 }

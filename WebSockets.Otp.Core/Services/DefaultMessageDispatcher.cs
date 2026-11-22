@@ -19,16 +19,34 @@ public class DefaultMessageDispatcher(
     public async Task DispatchMessage(IGlobalContext context, IMessageSerializer serializer, IMessageBuffer payload, CancellationToken token)
     {
         var messageHeader = serializer.ReadHeaders(payload.Memory);
+        
+        try
+        {
+            if (!TryResolveEndpoint(messageHeader, out var endpointInfo))
+            {
+                var envelope = new ErrorMessage(messageHeader.Id, WsErrorCode.UnknownRoute, "Endpoint not found");
+                await manager.Send(context.Connection.Id, envelope, token);
+                return;
+            }
 
-        if (!TryResolveEndpoint(messageHeader, out var endpointInfo))
+            await using var scope = scopeFactory.CreateAsyncScope();
+
+            if (!await TryAuthorizeAsync(scope.ServiceProvider, context, messageHeader, endpointInfo, token))
+                return;
+
+            await InvokeEndpointAsync(scope.ServiceProvider, context, messageHeader, endpointInfo, token);
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested)
+        {
             return;
+        }
+        catch (Exception ex)
+        {
+            logger.InternalError(context.Context, ex);
 
-        await using var scope = scopeFactory.CreateAsyncScope();
-
-        if (!await TryAuthorizeAsync(scope.ServiceProvider, context, messageHeader, endpointInfo, token))
-            return;
-
-        await InvokeEndpointAsync(scope.ServiceProvider, context, messageHeader, endpointInfo, token);
+            var envelope = new ErrorMessage(messageHeader.Id, WsErrorCode.Internal, "Internal error");
+            await manager.Send(context.Connection.Id, envelope, token);
+        }
     }
 
     private bool TryResolveEndpoint(MessageHeaders messageHeader, [NotNullWhen(true)] out WsEndpointInfo? endpointInfo)
@@ -57,15 +75,13 @@ public class DefaultMessageDispatcher(
         var result = await authorizer.AuthorizeAsync(context.Context, endpointInfo);
 
         if (!result.IsError)
-        {
             return true;
-        }
 
         logger.AuthorizationFailed(result.Error);
 
         if (messageHeader.Id != default)
         {
-            var envelope = new ErrorMessage(messageHeader.Id, result.Error);
+            var envelope = new ErrorMessage(messageHeader.Id, WsErrorCode.Unauthorized, result.Error);
             await manager.Send(context.Connection.Id, envelope, token);
         }
 

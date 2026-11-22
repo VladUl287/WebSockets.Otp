@@ -28,7 +28,7 @@ public sealed class MessagePackMessageSerializer(MessagePackSerializerOptions op
                 break;
             case ErrorMessage m:
                 writer.Write(m.Id);
-                writer.Write(m.Error);
+                writer.Write(m.Message);
                 break;
             case EventMessage m:
                 writer.Write(m.Key);

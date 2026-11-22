@@ -17,9 +17,14 @@ public sealed class RequestResponseEndpointInvoker<TRequest, TResponse> : IEndpo
         var serializer = connection.Serializer;
         var payload = context.Payload;
 
-        var request = serializer.Deserialize<TRequest>(payload) ??
-            throw new NullReferenceException(
-                $"Deserialization returned null for {typeof(TRequest).Name} at endpoint {endpoint.GetType().Name}.");
+        var request = serializer.Deserialize<TRequest>(payload);
+        if (request is null)
+        {
+            var envelope = new ErrorMessage(
+                context.CorrelationId, WsErrorCode.InvalidPayload, $"Deserialization returned null for {typeof(TRequest).Name} at endpoint {endpoint.GetType().Name}.");
+            await context.Manager.Send(connection.Id, envelope, context.Cancellation);
+            return;
+        }
 
         try
         {
@@ -29,7 +34,7 @@ public sealed class RequestResponseEndpointInvoker<TRequest, TResponse> : IEndpo
         }
         catch (Exception ex)
         {
-            var envelope = new ErrorMessage(context.CorrelationId, ex.Message);
+            var envelope = new ErrorMessage(context.CorrelationId, WsErrorCode.HandlerFailed, ex.Message);
             await context.Manager.Send(connection.Id, envelope, context.Cancellation);
         }
     }

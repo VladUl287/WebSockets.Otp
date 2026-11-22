@@ -1,15 +1,12 @@
-﻿using Microsoft.Extensions.Logging;
-using WebSockets.Otp.Abstractions.Contracts;
+﻿using WebSockets.Otp.Abstractions.Contracts;
 using WebSockets.Otp.Abstractions.Endpoints;
 using WebSockets.Otp.Abstractions.Options;
 using WebSockets.Otp.Abstractions.Serializers;
 using WebSockets.Otp.Abstractions.Transport;
-using WebSockets.Otp.Core.Logging;
 
 namespace WebSockets.Otp.Core.Processors;
 
-public sealed class ParallelMessageProcessor(
-    IMessageDispatcher dispatcher, IMessageEnumerator enumerator, ILogger<ParallelMessageProcessor> logger) : IMessageProcessor
+public sealed class ParallelMessageProcessor(IMessageDispatcher dispatcher, IMessageEnumerator enumerator) : IMessageProcessor
 {
     public async Task Process(
         IGlobalContext context, IMessageSerializer serializer, WsOptionsSnapshot options, CancellationToken token)
@@ -28,10 +25,6 @@ public sealed class ParallelMessageProcessor(
             try
             {
                 await dispatcher.DispatchMessage(context, serializer, buffer, token);
-            }
-            catch (Exception ex)
-            {
-                logger.LogDispatchMessageFailure(ex);
             }
             finally
             {

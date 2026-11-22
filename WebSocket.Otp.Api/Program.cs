@@ -58,7 +58,14 @@ var builder = WebApplication.CreateBuilder(args);
     builder.Services.AddAuthorization();
 
     builder.Services.AddWsEndpoints();
-    builder.Services.AddMessagePackSerializer();
+    builder.Services.AddJsonSerializer((c) => //JsonSerializerOptions
+    {
+        
+    });
+    builder.Services.AddMessagePackSerializer((c) => //MessagePackSerializerOptions
+    {
+
+    });
 
     //builder.Services.AddSingleton<IConnectionMultiplexer>(sp => ConnectionMultiplexer.Connect("localhost:6379"));
     //builder.Services.AddRedisManager();
@@ -89,6 +96,7 @@ var app = builder.Build();
         {
             opt.OnConnected = async (context) =>
             {
+                context.Context.User.GetUserId()
                 await context.Groups.AddAsync("general-chat", context.Connection.Id);
             };
             opt.OnDisconnected = async (context) =>
