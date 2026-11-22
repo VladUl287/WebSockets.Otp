@@ -5,17 +5,21 @@ namespace WebSockets.Otp.Abstractions.Utils;
 public readonly struct Success { }
 public readonly struct Error { }
 
-public readonly struct Result<TValue, TError>(TValue? value, TError? error)
+public readonly struct Result<TSuccess, TError>(int index, TSuccess? success = default, TError? error = default)
 {
-    public TValue? Value => value;
-    public TError? Error => error;
+    public int Index => index;
 
     [MemberNotNullWhen(true, nameof(Value))]
-    public bool IsSuccess => value is not null;
+    [MemberNotNullWhen(false, nameof(Error))]
+    public bool IsSuccess => index == 0;
 
     [MemberNotNullWhen(true, nameof(Error))]
-    public bool IsError => error is not null;
+    [MemberNotNullWhen(false, nameof(Value))]
+    public bool IsError => index == 1;
 
-    public static implicit operator Result<TValue, TError>(TValue t) => new(t, default);
-    public static implicit operator Result<TValue, TError>(TError t) => new(default, t);
+    public TSuccess? Value => success;
+    public TError? Error => error;
+
+    public static implicit operator Result<TSuccess, TError>(TSuccess t) => new(0, t);
+    public static implicit operator Result<TSuccess, TError>(TError t) => new(1, default, t);
 }
