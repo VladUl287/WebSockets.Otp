@@ -58,14 +58,6 @@ var builder = WebApplication.CreateBuilder(args);
     builder.Services.AddAuthorization();
 
     builder.Services.AddWsEndpoints();
-    builder.Services.AddJsonSerializer((c) => //JsonSerializerOptions
-    {
-        
-    });
-    builder.Services.AddMessagePackSerializer((c) => //MessagePackSerializerOptions
-    {
-
-    });
 
     //builder.Services.AddSingleton<IConnectionMultiplexer>(sp => ConnectionMultiplexer.Connect("localhost:6379"));
     //builder.Services.AddRedisManager();
