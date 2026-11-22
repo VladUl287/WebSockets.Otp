@@ -3,11 +3,11 @@
 
 # WebSockets.Otp
 
-### Full Documentation: [docs](https://vladul287.github.io/)
-
 A minimal WebSocket library for ASP.NET Core inspired by REPR principles. Provides a clean endpoint-based API for building real-time applications.
 
-## Quick Start
+## Full Documentation: [docs](https://vladul287.github.io/)
+
+### Quick Start
 
 #### 1. Install
 
