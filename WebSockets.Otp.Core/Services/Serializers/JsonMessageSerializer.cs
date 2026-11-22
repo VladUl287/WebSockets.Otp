@@ -45,8 +45,7 @@ public sealed class JsonMessageSerializer(JsonSerializerOptions options) : IMess
 
     public MessageHeaders ReadHeaders(ReadOnlyMemory<byte> data)
     {
-        var dataSpan = data.Span;
-        var reader = new Utf8JsonReader(dataSpan);
+        var reader = new Utf8JsonReader(data.Span);
 
         uint id = 0u;
         ReadOnlyMemory<byte> key = default;
