@@ -23,11 +23,11 @@ public sealed class MessagePackMessageSerializer(MessagePackSerializerOptions op
         switch (envelope)
         {
             case ResponseMessage m:
-                writer.Write(m.Id);
+                writer.Write(m.CorrelationId);
                 MessagePackSerializer.Serialize(ref writer, m.Value, options);
                 break;
             case ErrorMessage m:
-                writer.Write(m.Id);
+                writer.Write(m.CorrelationId);
                 writer.Write(m.Message);
                 break;
             case EventMessage m:

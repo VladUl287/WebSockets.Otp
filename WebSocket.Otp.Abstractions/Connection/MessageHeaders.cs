@@ -17,7 +17,7 @@ public abstract record WsMessage
     public abstract MessageType Type { get; }
 }
 
-public sealed record ResponseMessage(uint Id, object Value) : WsMessage
+public sealed record ResponseMessage(uint CorrelationId, object Value) : WsMessage
 {
     public override MessageType Type => MessageType.Response;
 }
@@ -37,7 +37,7 @@ public record WsError(string Message) : WsMessage
     public override MessageType Type => MessageType.Error;
 }
 
-public sealed record ErrorMessage(uint Id, WsErrorCode Code, string Message) : WsError(Message)
+public sealed record ErrorMessage(uint CorrelationId, WsErrorCode Code, string Message) : WsError(Message)
 { }
 
 public sealed record EventMessage(string Key, object Value) : WsMessage

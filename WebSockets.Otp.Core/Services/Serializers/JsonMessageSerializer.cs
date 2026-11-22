@@ -24,12 +24,12 @@ public sealed class JsonMessageSerializer(JsonSerializerOptions options) : IMess
         switch (data)
         {
             case ResponseMessage m:
-                writer.WriteNumber("id"u8, m.Id);
+                writer.WriteNumber("id"u8, m.CorrelationId);
                 writer.WritePropertyName("value"u8);
                 JsonSerializer.Serialize(writer, m.Value, options);
                 break;
             case ErrorMessage m:
-                writer.WriteNumber("id"u8, m.Id);
+                writer.WriteNumber("id"u8, m.CorrelationId);
                 writer.WriteString("error"u8, m.Message);
                 break;
             case EventMessage m:
