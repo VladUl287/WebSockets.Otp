@@ -1,7 +1,7 @@
-# WebSockets.Otp
-
 [![NuGet Status](https://img.shields.io/nuget/v/WebSockets.Otp.Core.svg?label=project&logo=NuGet&style=flat-square)](https://www.nuget.org/packages/WebSockets.Otp.Core/)
 [![NuGet Status](https://img.shields.io/nuget/dt/WebSockets.Otp.Core.svg?label=downloads&logo=NuGet&style=flat-square)](https://www.nuget.org/packages/WebSockets.Otp.Core/)
+
+# WebSockets.Otp
 
 A minimal WebSocket library for ASP.NET Core inspired by REPR principles. Provides a clean endpoint-based API for building real-time applications.
 
