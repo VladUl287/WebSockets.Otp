@@ -18,7 +18,7 @@ public sealed class DefaultHandshakeHandler(
     private const string Protocol = "json";
     private static readonly ReadOnlyMemory<byte> ResponseBytes = "{}"u8.ToArray();
 
-    public async ValueTask<Result<HandshakeOptions, Error>> HandleAsync(
+    public async ValueTask<Outcome<HandshakeOptions, Error>> HandleAsync(
         HttpContext context, WebSocket socket, WsOptionsSnapshot options, CancellationToken token)
     {
         var requestId = new RequestId(context);

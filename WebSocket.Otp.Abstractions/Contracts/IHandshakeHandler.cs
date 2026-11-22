@@ -7,6 +7,6 @@ namespace WebSockets.Otp.Abstractions.Contracts;
 
 public interface IHandshakeHandler
 {
-    ValueTask<Result<HandshakeOptions, Error>> HandleAsync(
+    ValueTask<Outcome<HandshakeOptions, Error>> HandleAsync(
         HttpContext context, WebSocket socket, WsOptionsSnapshot config, CancellationToken token);
 }

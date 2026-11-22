@@ -1,24 +1,22 @@
-﻿namespace WebSockets.Otp.Abstractions.Utils;
+﻿using WebSockets.Otp.Abstractions.Options;
 
-public readonly struct Success { }
-public readonly struct Error { }
+namespace WebSockets.Otp.Abstractions.Utils;
 
-public readonly struct Result<TSuccess, TError>(int index, TSuccess success = default, TError error = default)
+public readonly record struct Result<T>
 {
-    private readonly TSuccess _success = success;
-    private readonly TError _error = error;
-    private readonly int _index = index;
+    public T? Value { get; }
+    public WsError? Error { get; }
 
-    public int Index => _index;
-    public bool IsSuccess => _index == 0;
-    public bool IsError => _index == 1;
+    public bool IsSuccess => Error is null;
+    public bool IsError => Error is not null;
 
-    public static implicit operator Result<TSuccess, TError>(TSuccess t) => new(0, t, default);
-    public static implicit operator Result<TSuccess, TError>(TError t) => new(1, default, t);
+    private Result(T? value, WsError? error)
+    {
+        Value = value;
+        Error = error;
+    }
 
-    public TSuccess Value =>
-        _index == 0 ? _success : throw new InvalidOperationException($"Cannot return as First as result is Second");
-
-    public TError Error =>
-        _index == 1 ? _error : throw new InvalidOperationException($"Cannot return as Second as result is First");
+    public static Result<T> Ok(T value) => new(value, null);
+    public static Result<T> Fail(WsError error) => new(default, error);
+    public static Result<T> Fail(WsErrorCode code, string message) => new(default, new WsError(code, message));
 }

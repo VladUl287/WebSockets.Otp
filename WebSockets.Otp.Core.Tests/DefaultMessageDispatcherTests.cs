@@ -120,9 +120,9 @@ public sealed class DefaultMessageDispatcherTests
                 .Returns(EndpointContext.Object);
     }
 
-    private static Result<Success, string> SuccessResult() => new Success();
+    private static Outcome<Success, string> SuccessResult() => new Success();
 
-    private static Result<Success, string> ErrorResult(string error) => error;
+    private static Outcome<Success, string> ErrorResult(string error) => error;
 
     private static CancellationToken None => CancellationToken.None;
 
