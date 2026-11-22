@@ -32,10 +32,14 @@ public class DefaultMessageDispatcher(
 
             await using var scope = scopeFactory.CreateAsyncScope();
 
-            if (!await TryAuthorizeAsync(scope.ServiceProvider, context, headers, endpointInfo, token))
+            var services = scope.ServiceProvider;
+
+            if (!await TryAuthorizeAsync(services, context, headers, endpointInfo, token))
                 return;
 
-            await InvokeEndpointAsync(scope.ServiceProvider, context, headers, endpointInfo, token);
+            var endpoint = services.GetRequiredService(endpointInfo.Type);
+            var endpointContext = contextFactory.Create(context, services, endpointInfo, headers, token);
+            await endpointInfo.Invoker.Invoke(endpoint, endpointContext);
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested)
         {
@@ -81,14 +85,5 @@ public class DefaultMessageDispatcher(
         }
 
         return true;
-    }
-
-    private async Task InvokeEndpointAsync(
-        IServiceProvider services, IGlobalContext context, MessageHeaders headers,
-        WsEndpointInfo endpointInfo, CancellationToken token)
-    {
-        var endpoint = services.GetRequiredService(endpointInfo.Type);
-        var endpointContext = contextFactory.Create(context, services, endpointInfo, headers, token);
-        await endpointInfo.Invoker.Invoke(endpoint, endpointContext);
     }
 }
