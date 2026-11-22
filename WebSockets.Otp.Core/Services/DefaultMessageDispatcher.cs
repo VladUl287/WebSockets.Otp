@@ -65,21 +65,22 @@ public class DefaultMessageDispatcher(
         IServiceProvider services, IGlobalContext context, MessageHeaders headers,
         WsEndpointInfo endpointInfo, CancellationToken token)
     {
-        if (endpointInfo.Metadata.Count > 0)
+        if (endpointInfo is { Metadata.Count: 0 })
             return true;
 
-        var authorizer = services.GetRequiredService<IEndpointAuthorizer>();
-        var result = await authorizer.AuthorizeAsync(context.Context, endpointInfo);
+        var result = await services
+            .GetRequiredService<IEndpointAuthorizer>()
+            .AuthorizeAsync(context.Context, endpointInfo);
 
-        if (!result.IsError)
-            return true;
+        if (result.IsError)
+        {
+            logger.AuthorizationFailed(result.Error);
+            await manager.TrySendErrorAsync(
+                context.Connection.Id, headers.CorrelationId, WsErrorCode.Unauthorized, result.Error, token);
+            return false;
+        }
 
-        logger.AuthorizationFailed(result.Error);
-
-        await manager.TrySendErrorAsync(
-            context.Connection.Id, headers.CorrelationId, WsErrorCode.Unauthorized, result.Error, token);
-
-        return false;
+        return true;
     }
 
     private async Task InvokeEndpointAsync(
