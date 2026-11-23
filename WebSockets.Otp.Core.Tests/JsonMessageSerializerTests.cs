@@ -20,8 +20,8 @@ public sealed class JsonMessageSerializerTests
     private static ResponseMessage Response(uint id, object? value)
         => new(id, value);
 
-    private static ErrorMessage Error(uint id, string error)
-        => new(id, error);
+    private static ErrorMessage Error(uint id, WsErrorCode errorCode, string error)
+        => new(id, errorCode, error);
 
     private static EventMessage Event(string key, object? value)
         => new(key, value);
@@ -85,13 +85,14 @@ public sealed class JsonMessageSerializerTests
     public void Serialize_ErrorMessage_WritesType_Id_Error()
     {
         var buffer = new ArrayBufferWriter<byte>();
-        NewSerializer().SerializeMessage(Error(7, "nope"), buffer);
+        NewSerializer().SerializeMessage(Error(7, WsErrorCode.Unauthorized, "nope"), buffer);
 
         using var doc = JsonDocument.Parse(buffer.WrittenMemory);
         var root = doc.RootElement;
 
         Assert.Equal(7u, root.GetProperty("id").GetUInt32());
-        Assert.Equal("nope", root.GetProperty("error").GetString());
+        Assert.Equal(3, root.GetProperty("code").GetInt32());
+        Assert.Equal("nope", root.GetProperty("message").GetString());
     }
 
     [Fact]
@@ -123,10 +124,10 @@ public sealed class JsonMessageSerializerTests
     {
         var s = NewSerializer();
 
-        foreach (var (msg, label) in new (MessageHeaders, string)[]
+        foreach (var (msg, label) in new (WsMessage, string)[]
         {
             (Response(1, new { }), "response"),
-            (Error(1, "e"), "error"),
+            (Error(1, WsErrorCode.Unauthorized, "e"), "error"),
             (Event("k", 1), "event")
         })
         {
@@ -313,7 +314,7 @@ public sealed class JsonMessageSerializerTests
     {
         var s = NewSerializer();
         var buffer = new ArrayBufferWriter<byte>();
-        s.SerializeMessage(Error(11, "bad"), buffer);
+        s.SerializeMessage(Error(11, WsErrorCode.Unauthorized, "bad"), buffer);
 
         var h = s.ReadHeaders(buffer.WrittenMemory);
 
