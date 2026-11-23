@@ -324,7 +324,7 @@ export const useWsClient = (options: WsClientOptions): WsClient => {
                 }
                 break
             case MessageType.error:
-                pending.reject(parsed.id, parsed.error)
+                pending.reject(parsed.id, parsed.message)
                 break
         }
     }

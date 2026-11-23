@@ -48,6 +48,6 @@
     "tsx": "^4.23.15"
   },
   "dependencies": {
-    "@fefruess/websockets.otp.json": "^0.0.2"
+    "@fefruess/websockets.otp.json": "^0.0.4"
   }
 }
