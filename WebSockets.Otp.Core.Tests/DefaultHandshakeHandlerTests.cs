@@ -1,7 +1,7 @@
-﻿using Microsoft.AspNetCore.Http;
-using Microsoft.Extensions.Logging.Abstractions;
-using Moq;
+﻿using Moq;
 using System.Net.WebSockets;
+using System.Text;
+using System.Text.Json;
 using WebSockets.Otp.Abstractions.Options;
 using WebSockets.Otp.Abstractions.Serializers;
 using WebSockets.Otp.Abstractions.Transport;
@@ -9,108 +9,278 @@ using WebSockets.Otp.Core.Services;
 
 namespace WebSockets.Otp.Core.Tests;
 
-public class DefaultHandshakeHandlerTests
+public sealed class DefaultHandshakeHandlerTests
 {
-    private readonly Mock<ISerializerStore> _storeMock;
-    private readonly Mock<IMessageEnumerator> _enumeratorMock;
-    private readonly DefaultHandshakeHandler _handler;
-    private readonly Mock<HttpContext> _httpContextMock;
-    private readonly Mock<WebSocket> _webSocketMock;
-
-    public DefaultHandshakeHandlerTests()
+    private sealed class Mocks
     {
-        _storeMock = new Mock<ISerializerStore>();
-        _enumeratorMock = new Mock<IMessageEnumerator>();
+        public Mock<ISerializerStore> Store { get; } = new();
+        public Mock<IMessageEnumerator> Enumerator { get; } = new();
+    }
 
-        var logger = NullLogger<DefaultHandshakeHandler>.Instance;
+    private static DefaultHandshakeHandler CreateHandler(Mocks m) =>
+        new(m.Store.Object, m.Enumerator.Object);
 
-        _handler = new DefaultHandshakeHandler(
-            _storeMock.Object,
-            _enumeratorMock.Object
-        );
+    private static WsOptions DefaultOptions() => new(new WsConfig());
 
-        _httpContextMock = new Mock<HttpContext>();
-        _webSocketMock = new Mock<WebSocket>();
+    private static Mock<IMessageBuffer> CreateBuffer(string json)
+    {
+        var bytes = Encoding.UTF8.GetBytes(json);
+        var buffer = new Mock<IMessageBuffer>();
+        buffer.SetupGet(b => b.Memory).Returns(new Memory<byte>(bytes));
+        return buffer;
+    }
+
+    private static async IAsyncEnumerable<T> OneItem<T>(T item)
+    {
+        await Task.Yield();
+        yield return item;
+    }
+
+    private static async IAsyncEnumerable<T> NoItems<T>()
+    {
+        await Task.Yield();
+        yield break;
+    }
+
+    private static async IAsyncEnumerable<IMessageBuffer> FaultedEnumerable()
+    {
+        await Task.Yield();
+        await Task.FromException(new InvalidOperationException("boom"));
+        yield break;
+    }
+
+    private static Mock<WebSocket> CreateSocket()
+    {
+        var socket = new Mock<WebSocket>(MockBehavior.Loose);
+        socket
+            .Setup(s => s.SendAsync(
+                It.IsAny<ReadOnlyMemory<byte>>(),
+                It.IsAny<WebSocketMessageType>(),
+                It.IsAny<bool>(),
+                It.IsAny<CancellationToken>()))
+            .Returns(ValueTask.CompletedTask);
+        return socket;
+    }
+
+    private static Mock<IMessageEnumerator> StubEnumerator(Mocks mocks, IAsyncEnumerable<IMessageBuffer> source)
+    {
+        mocks.Enumerator
+            .Setup(e => e.EnumerateAsync(It.IsAny<WebSocket>(), It.IsAny<WsOptions>(), It.IsAny<CancellationToken>()))
+            .Returns(source);
+        return mocks.Enumerator;
     }
 
     [Fact]
-    public async Task HandleAsync_ReturnsNull_WhenNoHandshakeMessage()
+    public async Task HandleAsync_NoMessages_ReturnsError_AndDoesNotSendOrReturnBuffer()
     {
-        // Arrange
-        var options = new WsOptions(new WsConfig());
-        var token = CancellationToken.None;
+        var mocks = new Mocks();
+        var handler = CreateHandler(mocks);
+        StubEnumerator(mocks, NoItems<IMessageBuffer>());
 
-        var emptyEnumerable = Enumerable.Empty<IMessageBuffer>().ToAsyncEnumerable();
+        var socket = CreateSocket();
+        var result = await handler.HandleAsync(socket.Object, DefaultOptions(), CancellationToken.None);
 
-        _enumeratorMock
-            .Setup(e => e.EnumerateAsync(_webSocketMock.Object, options, token))
-            .Returns(emptyEnumerable);
-
-        // Act
-        var result = await _handler.HandleAsync(_httpContextMock.Object, _webSocketMock.Object, options, token);
-
-        // Assert
         Assert.True(result.IsError);
+        socket.Verify(
+            s => s.SendAsync(
+                It.IsAny<ReadOnlyMemory<byte>>(),
+                It.IsAny<WebSocketMessageType>(),
+                It.IsAny<bool>(),
+                It.IsAny<CancellationToken>()),
+            Times.Never);
+        mocks.Enumerator.Verify(
+            e => e.ReturnBuffer(It.IsAny<IMessageBuffer>()),
+            Times.Never);
     }
 
     [Fact]
-    public async Task HandleAsync_ReturnsNull_WhenSerializerNotFound()
+    public async Task HandleAsync_JsonNull_ReturnsError_AndReturnsBuffer()
     {
-        // Arrange
-        var options = new WsOptions(new WsConfig());
-        var token = CancellationToken.None;
-        var bufferMock = new Mock<IMessageBuffer>();
+        var mocks = new Mocks();
+        var handler = CreateHandler(mocks);
+        var buffer = CreateBuffer("null");
+        StubEnumerator(mocks, OneItem<IMessageBuffer>(buffer.Object));
 
-        bufferMock.SetupGet(b => b.Length).Returns(10);
+        var socket = CreateSocket();
+        var result = await handler.HandleAsync(socket.Object, DefaultOptions(), CancellationToken.None);
 
-        var messageBuffer = bufferMock.Object;
-        var enumerable = new[] { messageBuffer }.ToAsyncEnumerable();
-
-        _enumeratorMock
-            .Setup(e => e.EnumerateAsync(_webSocketMock.Object, options, token))
-            .Returns(enumerable);
-
-        _storeMock
-            .Setup(s => s.TryGet("json", out It.Ref<IMessageSerializer?>.IsAny))
-            .Returns(false);
-
-        // Act
-        var result = await _handler.HandleAsync(_httpContextMock.Object, _webSocketMock.Object, options, token);
-
-        // Assert
         Assert.True(result.IsError);
-        _storeMock.Verify(s => s.TryGet("json", out It.Ref<IMessageSerializer?>.IsAny), Times.Once);
+        socket.Verify(
+            s => s.SendAsync(
+                It.IsAny<ReadOnlyMemory<byte>>(),
+                It.IsAny<WebSocketMessageType>(),
+                It.IsAny<bool>(),
+                It.IsAny<CancellationToken>()),
+            Times.Never);
+        mocks.Enumerator.Verify(e => e.ReturnBuffer(buffer.Object), Times.Once);
     }
 
     [Fact]
-    public async Task HandleAsync_ThrowsOperationCanceledException_WhenCancelled()
+    public async Task HandleAsync_MalformedJson_Throws_AndReturnsBufferInFinally()
     {
-        // Arrange
-        var options = new WsOptions(new WsConfig());
+        var mocks = new Mocks();
+        var handler = CreateHandler(mocks);
+        var buffer = CreateBuffer("this is definitely not json");
+        StubEnumerator(mocks, OneItem<IMessageBuffer>(buffer.Object));
+
+        var socket = CreateSocket();
+
+        await Assert.ThrowsAsync<JsonException>(
+            async () => await handler.HandleAsync(socket.Object, DefaultOptions(), CancellationToken.None));
+
+        mocks.Enumerator.Verify(e => e.ReturnBuffer(buffer.Object), Times.Once);
+        socket.Verify(
+            s => s.SendAsync(
+                It.IsAny<ReadOnlyMemory<byte>>(),
+                It.IsAny<WebSocketMessageType>(),
+                It.IsAny<bool>(),
+                It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task HandleAsync_UnsupportedProtocol_ReturnsError_AndReturnsBuffer()
+    {
+        var mocks = new Mocks();
+        var handler = CreateHandler(mocks);
+        var buffer = CreateBuffer("""{"protocol":"unknown"}""");
+        StubEnumerator(mocks, OneItem<IMessageBuffer>(buffer.Object));
+
+        IMessageSerializer? unused = null;
+        mocks.Store.Setup(s => s.TryGet("unknown", out unused)).Returns(false);
+
+        var socket = CreateSocket();
+        var result = await handler.HandleAsync(socket.Object, DefaultOptions(), CancellationToken.None);
+
+        Assert.True(result.IsError);
+        socket.Verify(
+            s => s.SendAsync(
+                It.IsAny<ReadOnlyMemory<byte>>(),
+                It.IsAny<WebSocketMessageType>(),
+                It.IsAny<bool>(),
+                It.IsAny<CancellationToken>()),
+            Times.Never);
+        mocks.Enumerator.Verify(e => e.ReturnBuffer(buffer.Object), Times.Once);
+    }
+
+    [Fact]
+    public async Task HandleAsync_WhenEnumeratorFaults_Propagates()
+    {
+        var mocks = new Mocks();
+        var handler = CreateHandler(mocks);
+        StubEnumerator(mocks, FaultedEnumerable());
+
+        var socket = CreateSocket();
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            async () => await handler.HandleAsync(socket.Object, DefaultOptions(), CancellationToken.None));
+
+        mocks.Enumerator.Verify(
+            e => e.ReturnBuffer(It.IsAny<IMessageBuffer>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task HandleAsync_ValidHandshake_SendsEmptyJsonObjectResponse()
+    {
+        var mocks = new Mocks();
+        var handler = CreateHandler(mocks);
+        var buffer = CreateBuffer("""{"protocol":"json"}""");
+        StubEnumerator(mocks, OneItem<IMessageBuffer>(buffer.Object));
+
+        IMessageSerializer? serializer = Mock.Of<IMessageSerializer>();
+        mocks.Store.Setup(s => s.TryGet("json", out serializer)).Returns(true);
+
+        var socket = CreateSocket();
+        var result = await handler.HandleAsync(socket.Object, DefaultOptions(), CancellationToken.None);
+
+        Assert.False(result.IsError);
+        Assert.NotNull(result.Value);
+        Assert.Equal("json", result.Value.Protocol);
+
+        socket.Verify(
+            s => s.SendAsync(
+                It.Is<ReadOnlyMemory<byte>>(m => m.ToArray().SequenceEqual(Encoding.UTF8.GetBytes("{}"))),
+                WebSocketMessageType.Text,
+                true,
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+
+        mocks.Enumerator.Verify(e => e.ReturnBuffer(buffer.Object), Times.Once);
+    }
+
+    [Fact]
+    public async Task HandleAsync_ValidHandshake_DeserializesCamelCaseJsonCaseInsensitively()
+    {
+        var mocks = new Mocks();
+        var handler = CreateHandler(mocks);
+
+        var buffer = CreateBuffer("""{"Protocol":"json"}""");
+        StubEnumerator(mocks, OneItem(buffer.Object));
+
+        IMessageSerializer? serializer = Mock.Of<IMessageSerializer>();
+        mocks.Store.Setup(s => s.TryGet("json", out serializer)).Returns(true);
+
+        var socket = CreateSocket();
+        var result = await handler.HandleAsync(socket.Object, DefaultOptions(), CancellationToken.None);
+
+        Assert.False(result.IsError);
+        Assert.Equal("json", result.Value.Protocol);
+    }
+
+    [Fact]
+    public async Task HandleAsync_ValidHandshake_PassesCancellationTokenToEnumeratorAndSendAsync()
+    {
         var cts = new CancellationTokenSource();
-        cts.Cancel();
-        var token = cts.Token;
+        var mocks = new Mocks();
+        var handler = CreateHandler(mocks);
+        var buffer = CreateBuffer("""{"protocol":"json"}""");
 
-        _enumeratorMock
-            .Setup(e => e.EnumerateAsync(_webSocketMock.Object, options, token))
-            .Throws<OperationCanceledException>();
+        CancellationToken enumeratorToken = default;
+        mocks.Enumerator
+            .Setup(e => e.EnumerateAsync(It.IsAny<WebSocket>(), It.IsAny<WsOptions>(), It.IsAny<CancellationToken>()))
+            .Callback<WebSocket, WsOptions, CancellationToken>((_, _, t) => enumeratorToken = t)
+            .Returns(OneItem<IMessageBuffer>(buffer.Object));
 
-        // Act & Assert
-        await Assert.ThrowsAsync<OperationCanceledException>(() =>
-            _handler.HandleAsync(_httpContextMock.Object, _webSocketMock.Object, options, token).AsTask()
-        );
+        IMessageSerializer? serializer = Mock.Of<IMessageSerializer>();
+        mocks.Store.Setup(s => s.TryGet("json", out serializer)).Returns(true);
+
+        var socket = CreateSocket();
+        await handler.HandleAsync(socket.Object, DefaultOptions(), cts.Token);
+
+        Assert.Equal(cts.Token, enumeratorToken);
+        socket.Verify(
+            s => s.SendAsync(
+                It.IsAny<ReadOnlyMemory<byte>>(),
+                It.IsAny<WebSocketMessageType>(),
+                It.IsAny<bool>(),
+                It.Is<CancellationToken>(t => t == cts.Token)),
+            Times.Once);
     }
-}
 
-public static class TestHelpers
-{
-    public static async IAsyncEnumerable<T> ToAsyncEnumerable<T>(this IEnumerable<T> source)
+    [Fact]
+    public async Task HandleAsync_WhenSendThrows_StillReturnsBuffer()
     {
-        foreach (var item in source)
-        {
-            yield return item;
-            await Task.Yield();
-        }
+        var mocks = new Mocks();
+        var handler = CreateHandler(mocks);
+        var buffer = CreateBuffer("""{"protocol":"json"}""");
+        StubEnumerator(mocks, OneItem<IMessageBuffer>(buffer.Object));
+
+        IMessageSerializer? serializer = Mock.Of<IMessageSerializer>();
+        mocks.Store.Setup(s => s.TryGet("json", out serializer)).Returns(true);
+
+        var socket = new Mock<WebSocket>();
+        socket
+            .Setup(s => s.SendAsync(
+                It.IsAny<ReadOnlyMemory<byte>>(),
+                It.IsAny<WebSocketMessageType>(),
+                It.IsAny<bool>(),
+                It.IsAny<CancellationToken>()))
+            .Throws(new WebSocketException("socket closed"));
+
+        await Assert.ThrowsAsync<WebSocketException>(
+            async () => await handler.HandleAsync(socket.Object, DefaultOptions(), CancellationToken.None));
+
+        mocks.Enumerator.Verify(e => e.ReturnBuffer(buffer.Object), Times.Once);
     }
 }
-
