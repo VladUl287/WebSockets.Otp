@@ -1,398 +1,461 @@
-﻿using Microsoft.AspNetCore.Http;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
+using Microsoft.CodeAnalysis;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-using Moq;
+using NSubstitute;
 using WebSockets.Otp.Abstractions.Connection;
 using WebSockets.Otp.Abstractions.Endpoints;
 using WebSockets.Otp.Abstractions.Serializers;
 using WebSockets.Otp.Abstractions.Transport;
 using WebSockets.Otp.Abstractions.Utils;
+using WebSockets.Otp.Core.Extensions;
 using WebSockets.Otp.Core.Services;
 
 namespace WebSockets.Otp.Core.Tests;
 
-public sealed class DefaultMessageDispatcherTests
+public class DefaultMessageDispatcherTests
 {
     private sealed class TestEndpoint { }
 
-    private sealed class Fixture
+    private sealed class FakeResolver : ITrieResolver<WsEndpointInfo>
     {
-        public Mock<IServiceScopeFactory> ScopeFactory { get; } = new();
-        public Mock<IServiceScope> Scope { get; } = new();
-        public Mock<IContextFactory> ContextFactory { get; } = new();
-        public Mock<ITrieResolver<WsEndpointInfo>> Resolver { get; } = new();
-        public Mock<IWsConnectionManager> Manager { get; } = new();
-        public Mock<IMessageSerializer> Serializer { get; } = new();
-        public Mock<IMessageBuffer> Payload { get; } = new();
-        public Mock<IGlobalContext> GlobalContext { get; } = new();
-        public Mock<IWsConnection> Connection { get; } = new();
-        public Mock<HttpContext> HttpContext { get; } = new();
-        public Mock<IEndpointAuthorizer> Authorizer { get; } = new();
-        public Mock<IEndpointInvoker> Invoker { get; } = new();
-        public Mock<IEndpointContext> EndpointContext { get; } = new();
-        public ILogger<DefaultMessageDispatcher> Logger { get; } = NullLogger<DefaultMessageDispatcher>.Instance;
+        public bool Succeeds { get; set; }
+        public WsEndpointInfo? Value { get; set; }
 
-        public ServiceProvider Services { get; private set; } = null!;
-        public DefaultMessageDispatcher Dispatcher { get; private set; } = null!;
-
-        public Fixture()
+        public bool TryResolve(ReadOnlyMemory<byte> sequence, out WsEndpointInfo? value)
         {
-            Payload.SetupGet(p => p.Memory).Returns(new byte[] { 1, 2, 3 });
-            GlobalContext.SetupGet(c => c.Connection).Returns(Connection.Object);
-            GlobalContext.SetupGet(c => c.Context).Returns(HttpContext.Object);
-            Connection.SetupGet(c => c.Id).Returns("conn-1");
+            value = Value;
+            return Succeeds;
+        }
+    }
 
-            Services = new ServiceCollection()
-                .AddSingleton(Authorizer.Object)
-                .AddSingleton(new TestEndpoint())
-                .BuildServiceProvider();
+    private sealed class FakeAuthorizer : IEndpointAuthorizer
+    {
+        public Func<WsEndpointInfo, Task<Result<Success, Error<string>>>> Handler { get; set; }
+            = _ => Task.FromResult(ResultOk());
 
-            Scope.SetupGet(s => s.ServiceProvider).Returns(Services);
-            ScopeFactory.Setup(f => f.CreateScope()).Returns(Scope.Object);
+        public Task<Result<Success, Error<string>>> AuthorizeAsync(
+            IServiceProvider services, HttpContext context, WsEndpointInfo info)
+            => Handler(info);
+    }
+
+    private static Result<Success, Error<string>> ResultOk() => new Success();
+    private static Result<Success, Error<string>> ResultErr(string message) => new Error<string>(message);
+
+
+    private sealed class Fixture : IDisposable
+    {
+        public FakeResolver Resolver { get; } = new();
+        public FakeAuthorizer Authorizer { get; } = new();
+        public IEndpointInvoker Invoker { get; } = Substitute.For<IEndpointInvoker>();
+        public IWsConnectionManager Manager { get; } = Substitute.For<IWsConnectionManager>();
+        public IContextFactory ContextFactory { get; } = Substitute.For<IContextFactory>();
+        public IMessageSerializer Serializer { get; } = Substitute.For<IMessageSerializer>();
+        public IMessageBuffer Buffer { get; } = Substitute.For<IMessageBuffer>();
+        public IGlobalContext GlobalContext { get; } = Substitute.For<IGlobalContext>();
+
+        public ServiceProvider Provider { get; }
+        public WsEndpointInfo EndpointInfo { get; }
+        public object EndpointInstance { get; } = new TestEndpoint();
+        public DefaultMessageDispatcher Dispatcher { get; }
+
+        public Fixture(bool withMetadata = false)
+        {
+            EndpointInfo = new WsEndpointInfo
+            {
+                Key = "k",
+                Scope = ServiceLifetime.Scoped,
+                Type = typeof(TestEndpoint),
+                Metadata = withMetadata
+                    ? new EndpointMetadataCollection(new object())
+                    : EndpointMetadataCollection.Empty,
+                Invoker = Invoker,
+            };
+
+            var services = new ServiceCollection();
+            services.AddScoped(typeof(TestEndpoint), _ => EndpointInstance);
+            services.AddSingleton<IEndpointAuthorizer>(Authorizer);
+            Provider = services.BuildServiceProvider();
+
+            var scopeFactory = Substitute.For<IServiceScopeFactory>();
+            scopeFactory.CreateScope().Returns(_ => Provider.CreateScope());
+
+            var conn = Substitute.For<IWsConnection>();
+            conn.Id.Returns("conn-1");
+            GlobalContext.Connection.Returns(conn);
+            GlobalContext.Context.Returns(new DefaultHttpContext());
+
+            Buffer.Memory.Returns(Memory<byte>.Empty);
+
+            Manager
+                .Send(Arg.Any<string>(), Arg.Any<WsMessage>(), Arg.Any<CancellationToken>())
+                .Returns(ValueTask.CompletedTask);
+
+            ContextFactory
+                .Create(Arg.Any<IGlobalContext>(), Arg.Any<IServiceProvider>(),
+                        Arg.Any<WsEndpointInfo>(), Arg.Any<MessageHeaders>(), Arg.Any<CancellationToken>())
+                .Returns(Substitute.For<IEndpointContext>());
 
             Dispatcher = new DefaultMessageDispatcher(
-                ScopeFactory.Object,
-                ContextFactory.Object,
-                Resolver.Object,
-                Manager.Object,
-                Logger);
+                scopeFactory, ContextFactory, Resolver, Manager,
+                NullLogger<DefaultMessageDispatcher>.Instance);
         }
 
-        public static MessageHeaders Headers(uint id, byte[]? key = null, byte[]? value = null)
-            => new()
-            {
-                CorrelationId = id,
-                Key = key ?? [0xAB],
-                Value = value ?? [0xCD]
-            };
-
-        public void GivenHeaders(MessageHeaders headers)
-            => Serializer
-                .Setup(s => s.ReadHeaders(It.IsAny<ReadOnlyMemory<byte>>()))
-                .Returns(headers);
-
-        public WsEndpointInfo GivenEndpoint(bool withEndpoint = true)
+        public Fixture WithHeaders(ReadOnlyMemory<byte> key, uint correlationId)
         {
-            var info = new WsEndpointInfo
-            {
-                Key = string.Empty,
-                Endpoint = withEndpoint ? new(_ => Task.CompletedTask, EndpointMetadataCollection.Empty, "test-auth") : null,
-                Type = typeof(TestEndpoint),
-                Invoker = Invoker.Object
-            };
-
-            Resolver
-                .Setup(r => r.TryResolve(It.IsAny<ReadOnlyMemory<byte>>(), out It.Ref<WsEndpointInfo?>.IsAny))
-                .Returns((ReadOnlyMemory<byte> _, out WsEndpointInfo? value) =>
-                {
-                    value = info;
-                    return true;
-                });
-            return info;
+            Serializer
+                .ReadHeaders(Arg.Any<ReadOnlyMemory<byte>>())
+                .Returns(new MessageHeaders(correlationId, key, default));
+            return this;
         }
 
-        public void GivenResolverMiss()
-            => Resolver
-                .Setup(r => r.TryResolve(
-                    It.IsAny<ReadOnlyMemory<byte>>(),
-                    out It.Ref<WsEndpointInfo?>.IsAny))
-                .Returns((ReadOnlyMemory<byte> _, out WsEndpointInfo? value) =>
-                {
-                    value = null;
-                    return false;
-                });
-
-        public void GivenAuthorization(bool success, string error = "denied")
-            => Authorizer
-                .Setup(a => a.AuthorizeAsync(
-                    It.IsAny<HttpContext>(), It.IsAny<WsEndpointInfo>()))
-                .ReturnsAsync(success ? SuccessResult() : ErrorResult(error));
-
-        public void GivenContextFactory()
-            => ContextFactory
-                .Setup(c => c.Create(
-                    It.IsAny<uint>(),
-                    It.IsAny<IGlobalContext>(),
-                    It.IsAny<ReadOnlyMemory<byte>>(),
-                    It.IsAny<CancellationToken>()))
-                .Returns(EndpointContext.Object);
+        public void Dispose() => Provider.Dispose();
     }
 
-    private static Result<Success, string> SuccessResult() => new Success();
+    private static bool IsErrorMessage(WsMessage m, WsErrorCode code) =>
+        m is ErrorMessage e && e.Code == code;
 
-    private static Result<Success, string> ErrorResult(string error) => error;
+    private static bool IsErrorMessage(WsMessage m, WsErrorCode code, uint correlationId) =>
+        m is ErrorMessage e && e.Code == code && e.CorrelationId == correlationId;
 
-    private static CancellationToken None => CancellationToken.None;
+    private static bool IsErrorMessage(WsMessage m, WsErrorCode code, string message) =>
+        m is ErrorMessage e && e.Code == code && e.Message == message;
 
     [Fact]
-    public async Task DispatchMessage_ReadsHeaders_FromPayloadMemory()
+    public async Task Empty_Key_Sends_UnknownRoute()
     {
-        var f = new Fixture();
-        f.GivenHeaders(Fixture.Headers(1));
-        f.GivenEndpoint();
-        f.GivenAuthorization(true);
-        f.GivenContextFactory();
+        using var f = new Fixture();
+        f.WithHeaders(ReadOnlyMemory<byte>.Empty, 5u);
 
-        await f.Dispatcher.DispatchMessage(
-            f.GlobalContext.Object, f.Serializer.Object, f.Payload.Object, None);
+        await f.Dispatcher.DispatchMessage(f.GlobalContext, f.Serializer, f.Buffer, CancellationToken.None);
 
-        f.Serializer.Verify(s => s.ReadHeaders(
-            It.Is<ReadOnlyMemory<byte>>(m => m.ToArray().SequenceEqual(new byte[] { 1, 2, 3 }))),
-            Times.Once);
+        await f.Manager.Received(1).Send("conn-1",
+            Arg.Is<WsMessage>(m => IsErrorMessage(m, WsErrorCode.UnknownRoute)),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task DispatchMessage_EmptyKey_ShortCircuits_NoScope_NoInvoke()
+    public async Task Unresolvable_Key_Sends_UnknownRoute()
     {
-        var f = new Fixture();
-        f.GivenHeaders(Fixture.Headers(1, key: Array.Empty<byte>()));
+        using var f = new Fixture();
+        f.WithHeaders(new byte[] { 1 }, 5u);
+        f.Resolver.Succeeds = false;
 
-        await f.Dispatcher.DispatchMessage(
-            f.GlobalContext.Object, f.Serializer.Object, f.Payload.Object, None);
+        await f.Dispatcher.DispatchMessage(f.GlobalContext, f.Serializer, f.Buffer, CancellationToken.None);
 
-        f.Resolver.Verify(r => r.TryResolve(
-            It.IsAny<ReadOnlyMemory<byte>>(),
-            out It.Ref<WsEndpointInfo?>.IsAny), Times.Never);
-        f.ScopeFactory.Verify(s => s.CreateScope(), Times.Never);
-        f.Invoker.Verify(i => i.Invoke(
-            It.IsAny<object>(), It.IsAny<IEndpointContext>()), Times.Never);
+        await f.Manager.Received(1).Send("conn-1",
+            Arg.Is<WsMessage>(m => IsErrorMessage(m, WsErrorCode.UnknownRoute)),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task DispatchMessage_ResolverMiss_ShortCircuits_NoScope_NoInvoke()
+    public async Task Empty_Key_Propagates_Headers_CorrelationId()
     {
-        var f = new Fixture();
-        f.GivenHeaders(Fixture.Headers(1));
-        f.GivenResolverMiss();
+        using var f = new Fixture();
+        f.WithHeaders(ReadOnlyMemory<byte>.Empty, 99u);
 
-        await f.Dispatcher.DispatchMessage(
-            f.GlobalContext.Object, f.Serializer.Object, f.Payload.Object, None);
+        await f.Dispatcher.DispatchMessage(f.GlobalContext, f.Serializer, f.Buffer, CancellationToken.None);
 
-        f.ScopeFactory.Verify(s => s.CreateScope(), Times.Never);
-        f.Invoker.Verify(i => i.Invoke(
-            It.IsAny<object>(), It.IsAny<IEndpointContext>()), Times.Never);
+        await f.Manager.Received(1).Send("conn-1",
+            Arg.Is<WsMessage>(m => IsErrorMessage(m, WsErrorCode.UnknownRoute, 99u)),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task DispatchMessage_PassesHeaderKey_ToResolver()
+    public async Task Zero_CorrelationId_On_Error_Does_Not_Send()
     {
-        var f = new Fixture();
-        var key = new byte[] { 0xAA, 0xBB, 0xCC };
-        f.GivenHeaders(Fixture.Headers(1, key: key));
-        f.GivenEndpoint();
-        f.GivenAuthorization(true);
-        f.GivenContextFactory();
+        using var f = new Fixture();
+        f.WithHeaders(ReadOnlyMemory<byte>.Empty, 0u);
 
-        await f.Dispatcher.DispatchMessage(
-            f.GlobalContext.Object, f.Serializer.Object, f.Payload.Object, None);
+        await f.Dispatcher.DispatchMessage(f.GlobalContext, f.Serializer, f.Buffer, CancellationToken.None);
 
-        f.Resolver.Verify(r => r.TryResolve(
-            It.Is<ReadOnlyMemory<byte>>(m => m.ToArray().SequenceEqual(key)),
-            out It.Ref<WsEndpointInfo?>.IsAny), Times.Once);
+        await f.Manager.DidNotReceive()
+            .Send(Arg.Any<string>(), Arg.Any<WsMessage>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task DispatchMessage_EndpointNull_SkipsAuthorization_StillInvokes()
+    public async Task No_Metadata_Skips_Authorizer_And_Invokes()
     {
-        var f = new Fixture();
-        f.GivenHeaders(Fixture.Headers(1));
-        f.GivenEndpoint(withEndpoint: false);
-        f.GivenContextFactory();
+        using var f = new Fixture(withMetadata: false);
+        f.WithHeaders(new byte[] { 1 }, 5u);
+        f.Resolver.Succeeds = true;
+        f.Resolver.Value = f.EndpointInfo;
 
-        await f.Dispatcher.DispatchMessage(
-            f.GlobalContext.Object, f.Serializer.Object, f.Payload.Object, None);
+        var authorizerCalled = false;
+        f.Authorizer.Handler = _ => { authorizerCalled = true; return Task.FromResult(ResultOk()); };
 
-        f.Authorizer.Verify(a => a.AuthorizeAsync(
-            It.IsAny<HttpContext>(), It.IsAny<WsEndpointInfo>()), Times.Never);
-        f.Invoker.Verify(i => i.Invoke(
-            It.IsAny<object>(), f.EndpointContext.Object), Times.Once);
+        await f.Dispatcher.DispatchMessage(f.GlobalContext, f.Serializer, f.Buffer, CancellationToken.None);
+
+        Assert.False(authorizerCalled);
+        await f.Invoker.Received(1).Invoke(f.EndpointInstance, Arg.Any<IEndpointContext>());
+        await f.Manager.DidNotReceive()
+            .Send(Arg.Any<string>(), Arg.Any<WsMessage>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task DispatchMessage_AuthCalled_WithHttpContextAndResolvedInfo()
+    public async Task Metadata_Present_Authorizer_Success_Invokes_Endpoint()
     {
-        var f = new Fixture();
-        var info = f.GivenEndpoint();
-        f.GivenHeaders(Fixture.Headers(1));
-        f.GivenAuthorization(true);
-        f.GivenContextFactory();
+        using var f = new Fixture(withMetadata: true);
+        f.WithHeaders(new byte[] { 1 }, 5u);
+        f.Resolver.Succeeds = true;
+        f.Resolver.Value = f.EndpointInfo;
+        f.Authorizer.Handler = _ => Task.FromResult(ResultOk());
 
-        await f.Dispatcher.DispatchMessage(
-            f.GlobalContext.Object, f.Serializer.Object, f.Payload.Object, None);
+        await f.Dispatcher.DispatchMessage(f.GlobalContext, f.Serializer, f.Buffer, CancellationToken.None);
 
-        f.Authorizer.Verify(a => a.AuthorizeAsync(f.HttpContext.Object, info), Times.Once);
+        await f.Invoker.Received(1).Invoke(f.EndpointInstance, Arg.Any<IEndpointContext>());
+        await f.Manager.DidNotReceive()
+            .Send(Arg.Any<string>(), Arg.Any<WsMessage>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task DispatchMessage_AuthSuccess_InvokesEndpoint()
+    public async Task Metadata_Present_Authorizer_Failure_Sends_Unauthorized_And_Skips_Endpoint()
     {
-        var f = new Fixture();
-        f.GivenHeaders(Fixture.Headers(1));
-        f.GivenEndpoint();
-        f.GivenAuthorization(true);
-        f.GivenContextFactory();
+        using var f = new Fixture(withMetadata: true);
+        f.WithHeaders(new byte[] { 1 }, 5u);
+        f.Resolver.Succeeds = true;
+        f.Resolver.Value = f.EndpointInfo;
+        f.Authorizer.Handler = _ => Task.FromResult(ResultErr("denied"));
 
-        await f.Dispatcher.DispatchMessage(
-            f.GlobalContext.Object, f.Serializer.Object, f.Payload.Object, None);
+        await f.Dispatcher.DispatchMessage(f.GlobalContext, f.Serializer, f.Buffer, CancellationToken.None);
 
-        f.Invoker.Verify(i => i.Invoke(It.IsAny<object>(), f.EndpointContext.Object), Times.Once);
-        f.Manager.Verify(m => m.Send(
-            It.IsAny<string>(), It.IsAny<MessageHeaders>(), It.IsAny<CancellationToken>()), Times.Never);
+        await f.Manager.Received(1).Send("conn-1",
+            Arg.Is<WsMessage>(m => IsErrorMessage(m, WsErrorCode.Unauthorized, "denied")),
+            Arg.Any<CancellationToken>());
+
+        await f.Invoker.DidNotReceive().Invoke(Arg.Any<object>(), Arg.Any<IEndpointContext>());
     }
 
     [Fact]
-    public async Task DispatchMessage_AuthFailure_DoesNotInvokeEndpoint()
+    public async Task Unhandled_Exception_Sends_Internal_Error()
     {
-        var f = new Fixture();
-        f.GivenHeaders(Fixture.Headers(id: 42));
-        f.GivenEndpoint();
-        f.GivenAuthorization(false, "no access");
-        f.GivenContextFactory();
+        using var f = new Fixture(withMetadata: false);
+        f.WithHeaders(new byte[] { 1 }, 5u);
+        f.Resolver.Succeeds = true;
+        f.Resolver.Value = f.EndpointInfo;
 
-        await f.Dispatcher.DispatchMessage(
-            f.GlobalContext.Object, f.Serializer.Object, f.Payload.Object, None);
+        f.Invoker
+            .When(x => x.Invoke(Arg.Any<object>(), Arg.Any<IEndpointContext>()))
+            .Do(_ => throw new InvalidOperationException("boom"));
 
-        f.Invoker.Verify(i => i.Invoke(
-            It.IsAny<object>(), It.IsAny<IEndpointContext>()), Times.Never);
+        await f.Dispatcher.DispatchMessage(f.GlobalContext, f.Serializer, f.Buffer, CancellationToken.None);
+
+        await f.Manager.Received(1).Send("conn-1",
+            Arg.Is<WsMessage>(m => IsErrorMessage(m, WsErrorCode.Internal)),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task DispatchMessage_AuthFailure_NoCorrelationId_DoesNotSendError()
+    public async Task Cancellation_With_Cancelled_Token_Swallows_And_Does_Not_Send()
     {
-        var f = new Fixture();
-        f.GivenHeaders(Fixture.Headers(id: 0));
-        f.GivenEndpoint();
-        f.GivenAuthorization(false);
-        f.GivenContextFactory();
+        using var f = new Fixture(withMetadata: false);
+        f.WithHeaders(new byte[] { 1 }, 5u);
+        f.Resolver.Succeeds = true;
+        f.Resolver.Value = f.EndpointInfo;
 
-        await f.Dispatcher.DispatchMessage(
-            f.GlobalContext.Object, f.Serializer.Object, f.Payload.Object, None);
-
-        f.Manager.Verify(m => m.Send(
-            It.IsAny<string>(), It.IsAny<MessageHeaders>(), It.IsAny<CancellationToken>()),
-            Times.Never);
-    }
-
-    [Fact]
-    public async Task DispatchMessage_AuthFailure_WithCorrelationId_SendsErrorToConnection()
-    {
-        var f = new Fixture();
-        f.GivenHeaders(Fixture.Headers(id: 42));
-        f.GivenEndpoint();
-        f.GivenAuthorization(false, "no access");
-        f.GivenContextFactory();
-
-        await f.Dispatcher.DispatchMessage(
-            f.GlobalContext.Object, f.Serializer.Object, f.Payload.Object, None);
-
-        f.Manager.Verify(m => m.Send(
-            "conn-1",
-            It.Is<MessageHeaders>(m => m is ErrorMessage),
-            It.IsAny<CancellationToken>()),
-            Times.Once);
-    }
-
-    [Fact]
-    public async Task DispatchMessage_ResolvesEndpoint_FromServices_ByEndpointType()
-    {
-        var f = new Fixture();
-        f.GivenHeaders(Fixture.Headers(1));
-        f.GivenEndpoint();
-        f.GivenAuthorization(true);
-        f.GivenContextFactory();
-
-        await f.Dispatcher.DispatchMessage(
-            f.GlobalContext.Object, f.Serializer.Object, f.Payload.Object, None);
-
-        f.Invoker.Verify(i => i.Invoke(
-            It.Is<object>(e => e is TestEndpoint),
-            It.IsAny<IEndpointContext>()), Times.Once);
-    }
-
-    [Fact]
-    public async Task DispatchMessage_CreatesEndpointContext_WithCorrectArguments()
-    {
-        var f = new Fixture();
-        var value = new byte[] { 9, 8, 7 };
-        f.GivenHeaders(Fixture.Headers(id: 7, value: value));
-        f.GivenEndpoint();
-        f.GivenAuthorization(true);
-        f.GivenContextFactory();
+        f.Invoker
+            .When(x => x.Invoke(Arg.Any<object>(), Arg.Any<IEndpointContext>()))
+            .Do(_ => throw new OperationCanceledException());
 
         using var cts = new CancellationTokenSource();
+        cts.Cancel();
 
-        await f.Dispatcher.DispatchMessage(
-            f.GlobalContext.Object, f.Serializer.Object, f.Payload.Object, cts.Token);
+        await f.Dispatcher.DispatchMessage(f.GlobalContext, f.Serializer, f.Buffer, cts.Token);
 
-        f.ContextFactory.Verify(c => c.Create(
-            7u,
-            f.GlobalContext.Object,
-            It.Is<ReadOnlyMemory<byte>>(m => m.ToArray().SequenceEqual(value)),
-            cts.Token),
-            Times.Once);
+        await f.Manager.DidNotReceive()
+            .Send(Arg.Any<string>(), Arg.Any<WsMessage>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task DispatchMessage_PassesEndpointContext_ToInvoker()
+    public async Task Exception_With_Cancelled_Token_Not_OCE_Still_Sends_Internal()
     {
-        var f = new Fixture();
-        f.GivenHeaders(Fixture.Headers(1));
-        f.GivenEndpoint();
-        f.GivenAuthorization(true);
-        f.GivenContextFactory();
+        using var f = new Fixture(withMetadata: false);
+        f.WithHeaders(new byte[] { 1 }, 5u);
+        f.Resolver.Succeeds = true;
+        f.Resolver.Value = f.EndpointInfo;
 
-        await f.Dispatcher.DispatchMessage(
-            f.GlobalContext.Object, f.Serializer.Object, f.Payload.Object, None);
-
-        f.Invoker.Verify(i => i.Invoke(
-            It.IsAny<object>(), f.EndpointContext.Object), Times.Once);
-    }
-
-    [Fact]
-    public async Task DispatchMessage_DisposesScope_OnSuccess()
-    {
-        var f = new Fixture();
-        f.GivenHeaders(Fixture.Headers(1));
-        f.GivenEndpoint(withEndpoint: false);
-        f.GivenContextFactory();
-
-        await f.Dispatcher.DispatchMessage(
-            f.GlobalContext.Object, f.Serializer.Object, f.Payload.Object, None);
-
-        f.Scope.Verify(s => s.Dispose(), Times.Once);
-    }
-
-    [Fact]
-    public async Task DispatchMessage_DisposesScope_WhenAuthFails()
-    {
-        var f = new Fixture();
-        f.GivenHeaders(Fixture.Headers(1));
-        f.GivenEndpoint();
-        f.GivenAuthorization(false);
-        f.GivenContextFactory();
-
-        await f.Dispatcher.DispatchMessage(
-            f.GlobalContext.Object, f.Serializer.Object, f.Payload.Object, None);
-
-        f.Scope.Verify(s => s.Dispose(), Times.Once);
-    }
-
-    [Fact]
-    public async Task DispatchMessage_DisposesScope_WhenInvokerThrows()
-    {
-        var f = new Fixture();
-        f.GivenHeaders(Fixture.Headers(1));
-        f.GivenEndpoint();
-        f.GivenAuthorization(true);
-        f.GivenContextFactory();
         f.Invoker
-            .Setup(i => i.Invoke(It.IsAny<object>(), It.IsAny<IEndpointContext>()))
-            .ThrowsAsync(new InvalidOperationException("boom"));
+            .When(x => x.Invoke(Arg.Any<object>(), Arg.Any<IEndpointContext>()))
+            .Do(_ => throw new InvalidOperationException("boom"));
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => f.Dispatcher.DispatchMessage(
-            f.GlobalContext.Object, f.Serializer.Object, f.Payload.Object, None));
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
 
-        f.Scope.Verify(s => s.Dispose(), Times.Once);
+        await f.Dispatcher.DispatchMessage(f.GlobalContext, f.Serializer, f.Buffer, cts.Token);
+
+        await f.Manager.Received(1).Send("conn-1",
+            Arg.Is<WsMessage>(m => IsErrorMessage(m, WsErrorCode.Internal)),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Exception_With_Uncancelled_Token_Sends_Internal()
+    {
+        using var f = new Fixture(withMetadata: false);
+        f.WithHeaders(new byte[] { 1 }, 5u);
+        f.Resolver.Succeeds = true;
+        f.Resolver.Value = f.EndpointInfo;
+
+        f.Invoker
+            .When(x => x.Invoke(Arg.Any<object>(), Arg.Any<IEndpointContext>()))
+            .Do(_ => throw new OperationCanceledException());
+
+        await f.Dispatcher.DispatchMessage(f.GlobalContext, f.Serializer, f.Buffer, CancellationToken.None);
+
+        await f.Manager.Received(1).Send("conn-1",
+            Arg.Is<WsMessage>(m => IsErrorMessage(m, WsErrorCode.Internal)),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public void Constructor_Populates_All_Fields()
+    {
+        ReadOnlyMemory<byte> key = new byte[] { 1, 2, 3 };
+        ReadOnlyMemory<byte> value = new byte[] { 4, 5, 6 };
+
+        var headers = new MessageHeaders(42u, key, value);
+
+        Assert.Equal(42u, headers.CorrelationId);
+        Assert.Equal(key, headers.Key);
+        Assert.Equal(value, headers.Value);
+    }
+
+    [Fact]
+    public void Equality_Is_Structural()
+    {
+        ReadOnlyMemory<byte> key = new byte[] { 1 };
+        ReadOnlyMemory<byte> value = new byte[] { 2 };
+
+        var a = new MessageHeaders(1, key, value);
+        var b = new MessageHeaders(1, key, value);
+
+        Assert.Equal(a, b);
+    }
+
+    [Fact]
+    public void Key_And_Value_Can_Be_Empty()
+    {
+        var headers = new MessageHeaders(0, default, default);
+
+        Assert.True(headers.Key.IsEmpty);
+        Assert.True(headers.Value.IsEmpty);
+    }
+
+    [Fact]
+    public async Task Zero_CorrelationId_Does_Not_Send()
+    {
+        var manager = Substitute.For<IWsConnectionManager>();
+
+        await manager.TrySendErrorAsync("conn", 0u, WsErrorCode.Internal, "boom", CancellationToken.None);
+
+        await manager.DidNotReceive()
+            .Send(Arg.Any<string>(), Arg.Any<WsMessage>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task NonZero_CorrelationId_Sends_ErrorMessage()
+    {
+        var manager = Substitute.For<IWsConnectionManager>();
+        WsMessage? captured = null;
+
+        manager
+            .Send("conn", Arg.Do<WsMessage>(m => captured = m), Arg.Any<CancellationToken>())
+            .Returns(ValueTask.CompletedTask);
+
+        await manager.TrySendErrorAsync("conn", 7u, WsErrorCode.Unauthorized, "denied", CancellationToken.None);
+
+        var err = Assert.IsType<ErrorMessage>(captured);
+        Assert.Equal(7u, err.CorrelationId);
+        Assert.Equal(WsErrorCode.Unauthorized, err.Code);
+        Assert.Equal("denied", err.Message);
+    }
+
+    [Fact]
+    public async Task Forwards_ConnectionId_And_Token()
+    {
+        var manager = Substitute.For<IWsConnectionManager>();
+        using var cts = new CancellationTokenSource();
+
+        await manager.TrySendErrorAsync("conn-x", 1u, WsErrorCode.Internal, "x", cts.Token);
+
+        await manager.Received(1).Send("conn-x", Arg.Any<WsMessage>(), cts.Token);
+    }
+
+    private static WsEndpointInfo NewInfo() => new()
+    {
+        Key = "key",
+        Scope = ServiceLifetime.Singleton,
+        Type = typeof(object),
+        Metadata = EndpointMetadataCollection.Empty,
+        Invoker = Substitute.For<IEndpointInvoker>(),
+    };
+
+    [Fact]
+    public async Task Invokes_Factory_Once_And_Caches()
+    {
+        var info = NewInfo();
+        var count = 0;
+
+        Task<AuthorizationPolicy?> Factory(WsEndpointInfo _, IServiceProvider __)
+        {
+            Interlocked.Increment(ref count);
+            return Task.FromResult<AuthorizationPolicy?>(null);
+        }
+
+        var provider = Substitute.For<IServiceProvider>();
+
+        var first = await info.GetOrComputePolicy(Factory, provider);
+        var second = await info.GetOrComputePolicy(Factory, provider);
+
+        Assert.Null(first);
+        Assert.Null(second);
+        Assert.Equal(1, count);
+    }
+
+    [Fact]
+    public async Task Returns_Value_From_Factory_And_Caches()
+    {
+        var info = NewInfo();
+        var policy = new AuthorizationPolicyBuilder().RequireAuthenticatedUser().Build();
+
+        var result = await info.GetOrComputePolicy(
+            (_, _) => Task.FromResult<AuthorizationPolicy?>(policy),
+            Substitute.For<IServiceProvider>());
+
+        Assert.Same(policy, result);
+
+        var result2 = await info.GetOrComputePolicy(
+            (_, _) => Task.FromResult<AuthorizationPolicy?>(null),
+            Substitute.For<IServiceProvider>());
+
+        Assert.Same(policy, result2);
+    }
+
+    [Fact]
+    public async Task Concurrent_Calls_Invoke_Factory_Once()
+    {
+        var info = NewInfo();
+        var count = 0;
+        var gate = new TaskCompletionSource<AuthorizationPolicy?>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+
+        Task<AuthorizationPolicy?> Factory(WsEndpointInfo _, IServiceProvider __)
+        {
+            Interlocked.Increment(ref count);
+            return gate.Task;
+        }
+
+        var provider = Substitute.For<IServiceProvider>();
+        var tasks = Enumerable.Range(0, 32)
+            .Select(_ => Task.Run(() => info.GetOrComputePolicy(Factory, provider).AsTask()))
+            .ToArray();
+
+        await Task.Delay(50);
+        gate.SetResult(null);
+        await Task.WhenAll(tasks);
+
+        Assert.Equal(1, count);
+        Assert.All(tasks, t => Assert.Null(t.Result));
     }
 }
