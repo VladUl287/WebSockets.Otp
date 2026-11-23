@@ -46,6 +46,8 @@ public class DefaultMessageDispatcher(
 
                     await manager.TrySendErrorAsync(
                         context.Connection.Id, headers.CorrelationId, WsErrorCode.Unauthorized, result.Error, token);
+
+                    return;
                 }
             }
 
