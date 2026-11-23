@@ -2,9 +2,9 @@
 
 namespace WebSockets.Otp.Core.Extensions;
 
-internal static class ConnectionManagerExtensions
+public static class ConnectionManagerExtensions
 {
-    internal static ValueTask TrySendErrorAsync(
+    public static ValueTask TrySendErrorAsync(
        this IWsConnectionManager manager, string connectionId, uint correlationId,
        WsErrorCode code, string message, CancellationToken token)
     {
