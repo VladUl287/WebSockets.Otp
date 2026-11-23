@@ -28,21 +28,6 @@ public sealed class RequestResponseEndpointInvoker<TRequest, TResponse> : IEndpo
         }
 
         var response = await typedEndpoint.HandleAsync(request, context);
-
-        if (response is EndpointResult<TResponse> result)
-        {
-            if (result.IsError)
-            {
-                await context.Manager.TrySendErrorAsync(
-                    connection.Id, correlationId, WsErrorCode.HandlerFailed, result.Error, token);
-            }
-            if (result.IsSuccess)
-            {
-                var value = new ResponseMessage(correlationId, result.Value);
-                await context.Manager.Send(connection.Id, value, context.Token);
-            }
-        }
-
         var envelope = new ResponseMessage(correlationId, response);
         await context.Manager.Send(connection.Id, envelope, context.Token);
     }
