@@ -1,6 +1,5 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using System.Diagnostics.CodeAnalysis;
 using WebSockets.Otp.Abstractions.Connection;
 using WebSockets.Otp.Abstractions.Contracts;
 using WebSockets.Otp.Abstractions.Endpoints;
@@ -23,19 +22,32 @@ public class DefaultMessageDispatcher(
 
         try
         {
-            if (!TryResolveEndpoint(headers, out var endpointInfo))
+            if (headers.Key.IsEmpty || !endpointResolver.TryResolve(headers.Key, out var endpointInfo))
             {
+                logger.KeyFieldMissing();
+
                 await manager.TrySendErrorAsync(
                     context.Connection.Id, headers.CorrelationId, WsErrorCode.UnknownRoute, "Endpoint not found", token);
                 return;
             }
 
             await using var scope = scopeFactory.CreateAsyncScope();
-
             var services = scope.ServiceProvider;
 
-            if (!await TryAuthorizeAsync(services, context, headers, endpointInfo, token))
-                return;
+            if (endpointInfo is { Metadata.Count: > 0 })
+            {
+                var result = await services
+                    .GetRequiredService<IEndpointAuthorizer>()
+                    .AuthorizeAsync(context.Context, endpointInfo);
+
+                if (result.IsError)
+                {
+                    logger.AuthorizationFailed(result.Error);
+
+                    await manager.TrySendErrorAsync(
+                        context.Connection.Id, headers.CorrelationId, WsErrorCode.Unauthorized, result.Error, token);
+                }
+            }
 
             var endpoint = services.GetRequiredService(endpointInfo.Type);
             var endpointContext = contextFactory.Create(context, services, endpointInfo, headers, token);
@@ -52,38 +64,5 @@ public class DefaultMessageDispatcher(
             await manager.TrySendErrorAsync(
                 context.Connection.Id, headers.CorrelationId, WsErrorCode.Internal, "An error occurred while processing the message.", token);
         }
-    }
-
-    private bool TryResolveEndpoint(MessageHeaders headers, [NotNullWhen(true)] out WsEndpointInfo? endpoint)
-    {
-        endpoint = null;
-        if (headers.Key.IsEmpty || !endpointResolver.TryResolve(headers.Key, out endpoint))
-        {
-            logger.KeyFieldMissing();
-            return false;
-        }
-        return true;
-    }
-
-    private async Task<bool> TryAuthorizeAsync(
-        IServiceProvider services, IGlobalContext context, MessageHeaders headers,
-        WsEndpointInfo endpointInfo, CancellationToken token)
-    {
-        if (endpointInfo is { Metadata.Count: 0 })
-            return true;
-
-        var result = await services
-            .GetRequiredService<IEndpointAuthorizer>()
-            .AuthorizeAsync(context.Context, endpointInfo);
-
-        if (result.IsError)
-        {
-            logger.AuthorizationFailed(result.Error);
-            await manager.TrySendErrorAsync(
-                context.Connection.Id, headers.CorrelationId, WsErrorCode.Unauthorized, result.Error, token);
-            return false;
-        }
-
-        return true;
     }
 }
