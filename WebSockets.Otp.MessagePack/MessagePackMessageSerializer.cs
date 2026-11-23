@@ -28,6 +28,7 @@ public sealed class MessagePackMessageSerializer(MessagePackSerializerOptions op
                 break;
             case ErrorMessage m:
                 writer.Write(m.CorrelationId);
+                writer.Write((int)m.Code);
                 writer.Write(m.Message);
                 break;
             case EventMessage m:
