@@ -11,8 +11,6 @@ namespace WebSockets.Otp.Core.Services;
 
 public sealed class DefaultHandshakeHandler(ISerializerStore store, IMessageEnumerator enumerator) : IHandshakeHandler
 {
-    private const string Protocol = "json";
-
     private static readonly ReadOnlyMemory<byte> ResponseBytes = "{}"u8.ToArray();
     private static readonly JsonSerializerOptions DefaultOptions = new()
     {
@@ -31,10 +29,7 @@ public sealed class DefaultHandshakeHandler(ISerializerStore store, IMessageEnum
 
         try
         {
-            if (!store.TryGet(Protocol, out var serializer))
-                return new Error<string>($"Handshake failed: unsupported protocol '{Protocol}'.");
-
-            var handshakeOptions = serializer.Deserialize<WsHandshakeOptions>(handshakeBuffer.Memory, DefaultOptions);
+            var handshakeOptions = JsonSerializer.Deserialize<WsHandshakeOptions>(handshakeBuffer.Memory.Span, DefaultOptions);
 
             if (handshakeOptions is null)
                 return new Error<string>("Handshake failed: could not deserialize handshake options.");
