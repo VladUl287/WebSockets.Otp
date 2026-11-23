@@ -1,5 +1,4 @@
-﻿using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.Extensions.ObjectPool;
+﻿using Microsoft.Extensions.ObjectPool;
 using Moq;
 using System.Collections.Concurrent;
 using System.Net.WebSockets;
@@ -32,8 +31,7 @@ public class ParallelMessageProcessorTests
 
         _processor = new ParallelMessageProcessor(
             _mockDispatcher.Object,
-            _mockEnumerator.Object,
-            NullLogger<ParallelMessageProcessor>.Instance
+            _mockEnumerator.Object
         );
 
         _options = new WsOptions(new WsConfig
