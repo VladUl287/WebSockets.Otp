@@ -8,7 +8,7 @@ function isServerMessage(v: unknown): v is ServerMessage {
     const o = v as Record<string, unknown>
     switch (o.type) {
         case MessageType.response: return typeof o.id === 'number'
-        case MessageType.error: return typeof o.id === 'number' && typeof o.error === 'string'
+        case MessageType.error: return typeof o.id === 'number' && typeof o.code === 'number' && typeof o.message === 'string'
         case MessageType.event: return typeof o.key === 'string'
         default: return false
     }

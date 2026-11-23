@@ -1,6 +1,6 @@
 {
   "name": "@fefruess/websockets.otp.json",
-  "version": "0.0.2",
+  "version": "0.0.4",
   "type": "module",
   "license": "MIT",
   "main": "./dist/index.js",
@@ -19,6 +19,6 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@fefruess/websockets.otp.serializer.core": "^0.0.2"
+    "@fefruess/websockets.otp.serializer.core": "^0.0.4"
   }
 }
