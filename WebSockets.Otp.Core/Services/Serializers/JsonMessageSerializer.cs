@@ -31,7 +31,8 @@ public sealed class JsonMessageSerializer(JsonSerializerOptions options) : IMess
                 break;
             case ErrorMessage m:
                 writer.WriteNumber("id"u8, m.CorrelationId);
-                writer.WriteString("error"u8, m.Message);
+                writer.WriteNumber("code"u8, (int)m.Code);
+                writer.WriteString("message"u8, m.Message);
                 break;
             case EventMessage m:
                 writer.WriteString("key"u8, m.Key);
