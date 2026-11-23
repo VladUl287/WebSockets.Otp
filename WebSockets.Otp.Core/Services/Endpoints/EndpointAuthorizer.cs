@@ -1,53 +1,48 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
 using WebSockets.Otp.Abstractions.Endpoints;
 using WebSockets.Otp.Abstractions.Utils;
 
 namespace WebSockets.Otp.Core.Services.Endpoints;
 
-public sealed class EndpointAuthorizer(ILogger<EndpointAuthorizer> logger) : IEndpointAuthorizer
+public sealed class EndpointAuthorizer : IEndpointAuthorizer
 {
-    public async Task<Result<Success, string>> AuthorizeAsync(HttpContext context, WsEndpointInfo info)
+    public async Task<Result<Success, Error<string>>> AuthorizeAsync(
+        IServiceProvider services, HttpContext context, WsEndpointInfo info)
     {
         var principal = context.User;
         if (principal is null)
-            return "authorization failed. user not authenticated";
+            return new Error<string>("Authorization failed: user not authenticated.");
 
-        var services = context.RequestServices;
-
-        var policy = await info.GetOrComputePolicy((info, sp) =>
-        {
-            var endpoint = info.Metadata;
-
-            if (endpoint is null)
-                return Task.FromResult<AuthorizationPolicy?>(null);
-
-            var authorizeData = endpoint.GetOrderedMetadata<IAuthorizeData>();
-            if (authorizeData.Count == 0)
-                return Task.FromResult<AuthorizationPolicy?>(null);
-
-            var policyProvider = sp.GetRequiredService<IAuthorizationPolicyProvider>();
-            return AuthorizationPolicy.CombineAsync(policyProvider, authorizeData, []);
-        }, services);
-
+        var policy = await info.GetOrComputePolicy(BuildPolicy, services);
         if (policy is null)
             return new Success();
 
         var authzService = services.GetRequiredService<IAuthorizationService>();
         var authzResult = await authzService.AuthorizeAsync(principal, resource: null, policy);
 
-        if (!authzResult.Succeeded)
-        {
-            var failed = authzResult.Failure?.FailedRequirements
-                .Select(r => r.ToString() ?? r.GetType().Name)
-                .ToArray() ?? [];
+        if (authzResult.Succeeded)
+            return new Success();
 
-            logger.LogDebug("WS endpoint authorization failed. User={User}, Failed={Failed}", principal.Identity?.Name ?? "(anonymous)", string.Join(", ", failed));
-            return "authorization failed";
-        }
+        var failed = authzResult.Failure?.FailedRequirements
+            .Select(r => r.ToString() ?? r.GetType().Name)
+            .ToArray() ?? [];
 
-        return new Success();
+        return new Error<string>($"Authorization failed. Reason={string.Join(", ", failed)}");
+    }
+
+    private static Task<AuthorizationPolicy?> BuildPolicy(WsEndpointInfo endpointInfo, IServiceProvider sp)
+    {
+        var endpoint = endpointInfo.Metadata;
+        if (endpoint is { Count: 0 })
+            return Task.FromResult<AuthorizationPolicy?>(null);
+
+        var authorizeData = endpoint.GetOrderedMetadata<IAuthorizeData>();
+        if (authorizeData is { Count: 0 })
+            return Task.FromResult<AuthorizationPolicy?>(null);
+
+        var policyProvider = sp.GetRequiredService<IAuthorizationPolicyProvider>();
+        return AuthorizationPolicy.CombineAsync(policyProvider, authorizeData, []);
     }
 }

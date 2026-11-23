@@ -38,15 +38,14 @@ public class DefaultMessageDispatcher(
             {
                 var result = await services
                     .GetRequiredService<IEndpointAuthorizer>()
-                    .AuthorizeAsync(context.Context, endpointInfo);
+                    .AuthorizeAsync(services, context.Context, endpointInfo);
 
                 if (result.IsError)
                 {
-                    logger.AuthorizationFailed(result.Error);
-
+                    var error = result.Error.Value;
+                    logger.AuthorizationFailed(error);
                     await manager.TrySendErrorAsync(
-                        context.Connection.Id, headers.CorrelationId, WsErrorCode.Unauthorized, result.Error, token);
-
+                        context.Connection.Id, headers.CorrelationId, WsErrorCode.Unauthorized, error, token);
                     return;
                 }
             }

@@ -5,5 +5,5 @@ namespace WebSockets.Otp.Abstractions.Endpoints;
 
 public interface IEndpointAuthorizer
 {
-    Task<Result<Success, string>> AuthorizeAsync(HttpContext context, WsEndpointInfo info);
+    Task<Result<Success, Error<string>>> AuthorizeAsync(IServiceProvider services, HttpContext context, WsEndpointInfo info);
 }

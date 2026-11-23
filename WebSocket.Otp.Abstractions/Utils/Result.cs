@@ -2,6 +2,10 @@
 
 public readonly struct Success { }
 public readonly struct Error { }
+public readonly struct Error<T>(T value)
+{
+    public T Value => value;
+}
 
 public readonly struct Result<TSuccess, TError>
 {
