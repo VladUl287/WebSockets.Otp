@@ -54,10 +54,8 @@ public sealed class EndpointAuthorizerTests : IClassFixture<EndpointAuthorizerFi
             Type = typeof(object),
             Key = "",
             Invoker = null,
-            Endpoint = new(
-                requestDelegate: _ => Task.CompletedTask,
-                metadata: new EndpointMetadataCollection(metadata),
-                displayName: "test")
+            Metadata = new EndpointMetadataCollection(metadata),
+            Scope = ServiceLifetime.Scoped,
         };
     }
 
@@ -74,7 +72,7 @@ public sealed class EndpointAuthorizerTests : IClassFixture<EndpointAuthorizerFi
         var ctx = CreateSourceContext();
         var endpoint = BuildEndpoint();
 
-        var result = await _sut.AuthorizeAsync(ctx, endpoint);
+        var result = await _sut.AuthorizeAsync(_fixture.Services, ctx, endpoint);
 
         Assert.True(result.IsSuccess);
     }
@@ -85,7 +83,7 @@ public sealed class EndpointAuthorizerTests : IClassFixture<EndpointAuthorizerFi
         var ctx = CreateSourceContext(); // unauthenticated
         var endpoint = BuildEndpoint(new AuthorizeAttribute());
 
-        var result = await _sut.AuthorizeAsync(ctx, endpoint);
+        var result = await _sut.AuthorizeAsync(_fixture.Services, ctx, endpoint);
 
         Assert.False(result.IsSuccess);
     }
@@ -97,10 +95,10 @@ public sealed class EndpointAuthorizerTests : IClassFixture<EndpointAuthorizerFi
         var ctx = CreateSourceContext();
         var endpoint = BuildEndpoint(new AuthorizeAttribute());
 
-        var result = await _sut.AuthorizeAsync(ctx, endpoint);
+        var result = await _sut.AuthorizeAsync(_fixture.Services, ctx, endpoint);
 
         Assert.False(result.IsSuccess);
-        Assert.Equal("authorization failed", result.Error);
+        Assert.Equal("Authorization failed. Reason=DenyAnonymousAuthorizationRequirement: Requires an authenticated user.", result.Error.Value);
     }
 
     [Fact]
@@ -110,7 +108,7 @@ public sealed class EndpointAuthorizerTests : IClassFixture<EndpointAuthorizerFi
         var ctx = CreateSourceContext(TestAuthHandler.Principal.Value);
         var endpoint = BuildEndpoint(new AuthorizeAttribute());
 
-        var result = await _sut.AuthorizeAsync(ctx, endpoint);
+        var result = await _sut.AuthorizeAsync(_fixture.Services, ctx, endpoint);
 
         Assert.True(result.IsSuccess);
     }
@@ -123,7 +121,7 @@ public sealed class EndpointAuthorizerTests : IClassFixture<EndpointAuthorizerFi
         var ctx = CreateSourceContext(user: connectionUser);
         var endpoint = BuildEndpoint(new AuthorizeAttribute());
 
-        var result = await _sut.AuthorizeAsync(ctx, endpoint);
+        var result = await _sut.AuthorizeAsync(_fixture.Services, ctx, endpoint);
 
         Assert.True(result.IsSuccess);
     }
@@ -136,7 +134,7 @@ public sealed class EndpointAuthorizerTests : IClassFixture<EndpointAuthorizerFi
         var endpoint = BuildEndpoint(
             new AuthorizeAttribute { AuthenticationSchemes = TestAuthHandler.SchemeName });
 
-        var result = await _sut.AuthorizeAsync(ctx, endpoint);
+        var result = await _sut.AuthorizeAsync(_fixture.Services, ctx, endpoint);
 
         Assert.True(result.IsSuccess);
     }
@@ -152,7 +150,7 @@ public sealed class EndpointAuthorizerTests : IClassFixture<EndpointAuthorizerFi
                 AuthenticationSchemes = $"{TestAuthHandler.OtherSchemeName},{TestAuthHandler.SchemeName}"
             });
 
-        var result = await _sut.AuthorizeAsync(ctx, endpoint);
+        var result = await _sut.AuthorizeAsync(_fixture.Services, ctx, endpoint);
 
         Assert.True(result.IsSuccess);
     }
@@ -164,7 +162,7 @@ public sealed class EndpointAuthorizerTests : IClassFixture<EndpointAuthorizerFi
         var ctx = CreateSourceContext(TestAuthHandler.Principal.Value);
         var endpoint = BuildEndpoint(new AuthorizeAttribute { Roles = "admin" });
 
-        var result = await _sut.AuthorizeAsync(ctx, endpoint);
+        var result = await _sut.AuthorizeAsync(_fixture.Services, ctx, endpoint);
 
         Assert.True(result.IsSuccess);
     }
@@ -176,10 +174,10 @@ public sealed class EndpointAuthorizerTests : IClassFixture<EndpointAuthorizerFi
         var ctx = CreateSourceContext();
         var endpoint = BuildEndpoint(new AuthorizeAttribute { Roles = "admin" });
 
-        var result = await _sut.AuthorizeAsync(ctx, endpoint);
+        var result = await _sut.AuthorizeAsync(_fixture.Services, ctx, endpoint);
 
         Assert.False(result.IsSuccess);
-        Assert.NotEmpty(result.Error);
+        Assert.NotEmpty(result.Error.Value);
     }
 
     [Fact]
@@ -194,7 +192,7 @@ public sealed class EndpointAuthorizerTests : IClassFixture<EndpointAuthorizerFi
         var ctx = CreateSourceContext(user);
         var endpoint = BuildEndpoint(new AuthorizeAttribute { Policy = "Adult" });
 
-        var result = await _sut.AuthorizeAsync(ctx, endpoint);
+        var result = await _sut.AuthorizeAsync(_fixture.Services, ctx, endpoint);
 
         Assert.True(result.IsSuccess);
     }
@@ -211,10 +209,10 @@ public sealed class EndpointAuthorizerTests : IClassFixture<EndpointAuthorizerFi
         var ctx = CreateSourceContext();
         var endpoint = BuildEndpoint(new AuthorizeAttribute { Policy = "Adult" });
 
-        var result = await _sut.AuthorizeAsync(ctx, endpoint);
+        var result = await _sut.AuthorizeAsync(_fixture.Services, ctx, endpoint);
 
         Assert.False(result.IsSuccess);
-        Assert.NotEmpty(result.Error);
+        Assert.NotEmpty(result.Error.Value);
     }
 
     [Fact]
@@ -224,7 +222,7 @@ public sealed class EndpointAuthorizerTests : IClassFixture<EndpointAuthorizerFi
         var ctx = CreateSourceContext(TestAuthHandler.Principal.Value);
         var endpoint = BuildEndpoint(new AuthorizeAttribute { Policy = "SchemeBound" });
 
-        var result = await _sut.AuthorizeAsync(ctx, endpoint);
+        var result = await _sut.AuthorizeAsync(_fixture.Services, ctx, endpoint);
 
         Assert.True(result.IsSuccess);
     }
@@ -236,11 +234,11 @@ public sealed class EndpointAuthorizerTests : IClassFixture<EndpointAuthorizerFi
         var ctx = CreateSourceContext(TestAuthHandler.Principal.Value);
         var endpoint = BuildEndpoint(
             new AuthorizeAttribute { Roles = "admin" },
-            new AuthorizeAttribute { Policy = "Adult" }); // Adult requires DOB claim
+            new AuthorizeAttribute { Policy = "Adult" });
 
-        var result = await _sut.AuthorizeAsync(ctx, endpoint);
+        var result = await _sut.AuthorizeAsync(_fixture.Services, ctx, endpoint);
 
-        Assert.False(result.IsSuccess); // DOB missing → Adult fails
+        Assert.False(result.IsSuccess);
     }
 
     [Fact]
@@ -254,7 +252,7 @@ public sealed class EndpointAuthorizerTests : IClassFixture<EndpointAuthorizerFi
         var endpoint = BuildEndpoint(
             new AuthorizeAttribute { AuthenticationSchemes = TestAuthHandler.SchemeName });
 
-        var result = await _sut.AuthorizeAsync(ctx, endpoint);
+        var result = await _sut.AuthorizeAsync(_fixture.Services, ctx, endpoint);
 
         Assert.True(result.IsSuccess);
     }
@@ -268,7 +266,7 @@ public sealed class EndpointAuthorizerTests : IClassFixture<EndpointAuthorizerFi
         var endpoint = BuildEndpoint(new AuthorizeAttribute());
 
         var ex = await Record.ExceptionAsync(() =>
-            _sut.AuthorizeAsync(ctx, endpoint));
+            _sut.AuthorizeAsync(_fixture.Services, ctx, endpoint));
 
         Assert.True(ex is null or OperationCanceledException);
     }
@@ -281,10 +279,10 @@ public sealed class EndpointAuthorizerTests : IClassFixture<EndpointAuthorizerFi
         var endpoint = BuildEndpoint(
             new AuthorizeAttribute { AuthenticationSchemes = TestAuthHandler.SchemeName });
 
-        var result = await _sut.AuthorizeAsync(ctx, endpoint);
+        var result = await _sut.AuthorizeAsync(_fixture.Services, ctx, endpoint);
 
         Assert.False(result.IsSuccess);
-        Assert.NotNull(result.Error);
+        Assert.NotNull(result.Error.Value);
     }
 
     [Fact]
@@ -294,9 +292,9 @@ public sealed class EndpointAuthorizerTests : IClassFixture<EndpointAuthorizerFi
         var ctx = CreateSourceContext();
         var endpoint = BuildEndpoint(new AuthorizeAttribute { Roles = "admin" });
 
-        var result = await _sut.AuthorizeAsync(ctx, endpoint);
+        var result = await _sut.AuthorizeAsync(_fixture.Services, ctx, endpoint);
 
         Assert.False(result.IsSuccess);
-        Assert.NotEmpty(result.Error);
+        Assert.NotEmpty(result.Error.Value);
     }
 }
