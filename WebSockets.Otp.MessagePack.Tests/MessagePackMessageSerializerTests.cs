@@ -20,8 +20,8 @@ public sealed class MessagePackMessageSerializerTests
     private static ResponseMessage Response(uint id, object? value)
         => new(id, value);
 
-    private static ErrorMessage Error(uint id, string error)
-        => new(id, error);
+    private static ErrorMessage Error(uint id, WsErrorCode code, string error)
+        => new(id, code, error);
 
     private static EventMessage Event(string key, object? value)
         => new(key, value);
@@ -83,12 +83,13 @@ public sealed class MessagePackMessageSerializerTests
     public void Serialize_ErrorMessage_WritesArray3_Type_Id_Error()
     {
         var buffer = new ArrayBufferWriter<byte>();
-        NewSerializer().SerializeMessage(Error(7, "nope"), buffer);
+        NewSerializer().SerializeMessage(Error(7, WsErrorCode.Unauthorized, "nope"), buffer);
 
         var reader = new MessagePackReader(buffer.WrittenMemory);
         Assert.Equal(3, reader.ReadArrayHeader());
         Assert.Equal(Convert.ToUInt32(MessageType.Error.Value), reader.ReadUInt32());
         Assert.Equal(7u, reader.ReadUInt32());
+        Assert.Equal(3, reader.ReadInt32());
         Assert.Equal("nope", reader.ReadString());
     }
 
@@ -108,10 +109,10 @@ public sealed class MessagePackMessageSerializerTests
     [Fact]
     public void Serialize_AlwaysWritesThreeElements()
     {
-        var types = new (MessageHeaders, string)[]
+        var types = new (WsMessage, string)[]
         {
             (Response(1, 1), "response"),
-            (Error(1, "e"), "error"),
+            (Error(1, WsErrorCode.Unauthorized, "e"), "error"),
             (Event("k", 1), "event"),
         };
 
