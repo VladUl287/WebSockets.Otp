@@ -1,12 +1,10 @@
 ﻿using System.Net.WebSockets;
-using Microsoft.AspNetCore.Http;
 using WebSockets.Otp.Abstractions.Utils;
 using WebSockets.Otp.Abstractions.Options;
 
-namespace WebSockets.Otp.Abstractions.Contracts;
+namespace WebSockets.Otp.Abstractions.Middleware;
 
 public interface IHandshakeHandler
 {
-    ValueTask<Result<WsHandshakeOptions, Error>> HandleAsync(
-        HttpContext context, WebSocket socket, WsOptions config, CancellationToken token);
+    ValueTask<Result<WsHandshakeOptions, Error<string>>> HandleAsync(WebSocket socket, WsOptions config, CancellationToken token);
 }

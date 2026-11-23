@@ -4,9 +4,11 @@ using System.Net.WebSockets;
 using WebSockets.Otp.Abstractions.Connection;
 using WebSockets.Otp.Abstractions.Contracts;
 using WebSockets.Otp.Abstractions.Endpoints;
+using WebSockets.Otp.Abstractions.Middleware;
 using WebSockets.Otp.Abstractions.Options;
 using WebSockets.Otp.Abstractions.Serializers;
 using WebSockets.Otp.Abstractions.Transport;
+using WebSockets.Otp.Abstractions.Utils;
 using WebSockets.Otp.Core.Logging;
 
 namespace WebSockets.Otp.Core.Services;
@@ -24,10 +26,11 @@ public sealed class DefaultConnectionHandler(
 
         using var socket = await context.WebSockets.AcceptWebSocketAsync();
 
-        var serializer = await NegotiateAsync(context, socket, options, token);
-        if (serializer is null)
+        var negotiateResult = await NegotiateAsync(context, socket, options, token);
+        if (negotiateResult.IsError)
             return;
 
+        var serializer = negotiateResult.Value;
         var connection = connectionFactory.Create(socket, serializer);
         if (!await connectionManager.TryAdd(connection, token))
         {
@@ -40,23 +43,38 @@ public sealed class DefaultConnectionHandler(
         await RunSessionAsync(connection, serializer, context, socket, options, token);
     }
 
-    private async Task<IMessageSerializer?> NegotiateAsync(
+    private async ValueTask<Result<IMessageSerializer, Error>> NegotiateAsync(
        HttpContext context, WebSocket socket, WsOptions options, CancellationToken token)
     {
-        var handshakeResult = await handshakeService.HandleAsync(context, socket, options, token);
-        if (handshakeResult.IsError)
-            return null;
-
-        var protocol = handshakeResult.Value.Protocol;
-        logger.HandshakeCompleted(protocol, context);
-
-        if (!serializerStore.TryGet(protocol, out var serializer))
+        try
         {
-            logger.SerializerNotFound(protocol, context);
-            return null;
-        }
+            var handshake = await handshakeService.HandleAsync(socket, options, token);
+            if (handshake.IsError)
+            {
+                logger.HandshakeFailed(handshake.Error.Value, context);
+                return new Error();
+            }
 
-        return serializer;
+            var protocol = handshake.Value.Protocol;
+            if (!serializerStore.TryGet(protocol, out var serializer))
+            {
+                logger.SerializerNotFound(protocol, context);
+                return new Error();
+            }
+
+            logger.HandshakeCompleted(protocol, context);
+            return Result<IMessageSerializer, Error>.Ok(serializer);
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested)
+        {
+            logger.HandshakeCancelled(context);
+            return new Error();
+        }
+        catch (Exception ex)
+        {
+            logger.HandshakeThrew(ex, context);
+            return new Error();
+        }
     }
 
     private async Task RunSessionAsync(
