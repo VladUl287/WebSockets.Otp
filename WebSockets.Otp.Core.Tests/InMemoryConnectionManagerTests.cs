@@ -10,9 +10,9 @@ namespace WebSockets.Otp.Core.Tests;
 
 public sealed class InMemoryConnectionManagerTests
 {
-    private static MessageHeaders NewMessage() => new Mock<MessageHeaders>().Object;
+    private static WsMessage NewMessage() => new Mock<WsMessage>().Object;
 
-    private static (InMemoryConnectionManager Manager, Mock<ObjectPool<ArrayBufferWriter<byte>>> Pool)NewManager()
+    private static (InMemoryConnectionManager Manager, Mock<ObjectPool<ArrayBufferWriter<byte>>> Pool) NewManager()
     {
         var pool = new Mock<ObjectPool<ArrayBufferWriter<byte>>>();
         pool.Setup(p => p.Get()).Returns(() => new ArrayBufferWriter<byte>());
@@ -30,9 +30,9 @@ public sealed class InMemoryConnectionManagerTests
         s.SetupGet(x => x.Protocol).Returns(protocol);
         s.SetupGet(x => x.Type).Returns(type);
         s.Setup(x => x.SerializeMessage(
-                It.IsAny<MessageHeaders>(),
+                It.IsAny<WsMessage>(),
                 It.IsAny<IBufferWriter<byte>>()))
-         .Callback<MessageHeaders, IBufferWriter<byte>>((_, buf) => buf.Write(payload));
+         .Callback<WsMessage, IBufferWriter<byte>>((_, buf) => buf.Write(payload));
         return s;
     }
 
@@ -203,7 +203,7 @@ public sealed class InMemoryConnectionManagerTests
         await mgr.Send(NewMessage(), CancellationToken.None);
 
         s.Verify(x => x.SerializeMessage(
-            It.IsAny<MessageHeaders>(), It.IsAny<IBufferWriter<byte>>()),
+            It.IsAny<WsMessage>(), It.IsAny<IBufferWriter<byte>>()),
             Times.Once);
     }
 
