@@ -12,10 +12,8 @@ public sealed class GlobalContext(
     WebSocket socket) : IGlobalContext
 {
     public IWsConnection Connection => connection;
-
     public IWsConnectionManager Manager => manager;
 
     public HttpContext Context => context;
-
     public WebSocket Socket => socket;
 }
