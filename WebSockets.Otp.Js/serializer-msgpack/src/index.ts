@@ -1,4 +1,4 @@
-import { MessageType, type MessageSerializer } from "@fefruess/websockets.otp.serializer.core"
+import { MessageType, WsErrorCode, type MessageSerializer } from "@fefruess/websockets.otp.serializer.core"
 import { Decoder, Encoder, type DecoderOptions, type EncoderOptions } from "@msgpack/msgpack"
 
 const textEncoder = new TextEncoder()
@@ -30,13 +30,13 @@ export const msgPackSerializer = (options?: {
             return encoder.encode([data.id, data.key, data.value])
         },
         deserializeServer: (data) => {
-            const [type, a, b] = decoder.decode(typeof data === "string" ? textEncoder.encode(data) : data) as [number, unknown, unknown]
+            const [type, a, b, c] = decoder.decode(typeof data === "string" ? textEncoder.encode(data) : data) as [number, unknown, unknown, unknown]
 
             switch (type) {
                 case MessageType.response:
                     return { type, id: a as number, value: b }
                 case MessageType.error:
-                    return { type, id: a as number, error: b as string }
+                    return { type, id: a as number, code: b as WsErrorCode, message: c as string }
                 case MessageType.event:
                     return { type, key: a as string, value: b }
                 default:
