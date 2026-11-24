@@ -188,7 +188,7 @@ public class DefaultMessageDispatcherTests
         await f.Dispatcher.DispatchMessage(f.GlobalContext, f.Serializer, f.Buffer, CancellationToken.None);
 
         Assert.False(authorizerCalled);
-        await f.Invoker.Received(1).Invoke(f.EndpointInstance, Arg.Any<IEndpointContext>());
+        await f.Invoker.Received(1).Invoke(Arg.Any<IEndpointContext>());
         await f.Manager.DidNotReceive()
             .Send(Arg.Any<string>(), Arg.Any<WsMessage>(), Arg.Any<CancellationToken>());
     }
@@ -204,7 +204,7 @@ public class DefaultMessageDispatcherTests
 
         await f.Dispatcher.DispatchMessage(f.GlobalContext, f.Serializer, f.Buffer, CancellationToken.None);
 
-        await f.Invoker.Received(1).Invoke(f.EndpointInstance, Arg.Any<IEndpointContext>());
+        await f.Invoker.Received(1).Invoke(Arg.Any<IEndpointContext>());
         await f.Manager.DidNotReceive()
             .Send(Arg.Any<string>(), Arg.Any<WsMessage>(), Arg.Any<CancellationToken>());
     }
@@ -224,7 +224,7 @@ public class DefaultMessageDispatcherTests
             Arg.Is<WsMessage>(m => IsErrorMessage(m, WsErrorCode.Unauthorized, "denied")),
             Arg.Any<CancellationToken>());
 
-        await f.Invoker.DidNotReceive().Invoke(Arg.Any<object>(), Arg.Any<IEndpointContext>());
+        await f.Invoker.DidNotReceive().Invoke(Arg.Any<IEndpointContext>());
     }
 
     [Fact]
@@ -236,7 +236,7 @@ public class DefaultMessageDispatcherTests
         f.Resolver.Value = f.EndpointInfo;
 
         f.Invoker
-            .When(x => x.Invoke(Arg.Any<object>(), Arg.Any<IEndpointContext>()))
+            .When(x => x.Invoke(Arg.Any<IEndpointContext>()))
             .Do(_ => throw new InvalidOperationException("boom"));
 
         await f.Dispatcher.DispatchMessage(f.GlobalContext, f.Serializer, f.Buffer, CancellationToken.None);
@@ -255,7 +255,7 @@ public class DefaultMessageDispatcherTests
         f.Resolver.Value = f.EndpointInfo;
 
         f.Invoker
-            .When(x => x.Invoke(Arg.Any<object>(), Arg.Any<IEndpointContext>()))
+            .When(x => x.Invoke(Arg.Any<IEndpointContext>()))
             .Do(_ => throw new OperationCanceledException());
 
         using var cts = new CancellationTokenSource();
@@ -276,7 +276,7 @@ public class DefaultMessageDispatcherTests
         f.Resolver.Value = f.EndpointInfo;
 
         f.Invoker
-            .When(x => x.Invoke(Arg.Any<object>(), Arg.Any<IEndpointContext>()))
+            .When(x => x.Invoke(Arg.Any<IEndpointContext>()))
             .Do(_ => throw new InvalidOperationException("boom"));
 
         using var cts = new CancellationTokenSource();
@@ -298,7 +298,7 @@ public class DefaultMessageDispatcherTests
         f.Resolver.Value = f.EndpointInfo;
 
         f.Invoker
-            .When(x => x.Invoke(Arg.Any<object>(), Arg.Any<IEndpointContext>()))
+            .When(x => x.Invoke(Arg.Any<IEndpointContext>()))
             .Do(_ => throw new OperationCanceledException());
 
         await f.Dispatcher.DispatchMessage(f.GlobalContext, f.Serializer, f.Buffer, CancellationToken.None);
