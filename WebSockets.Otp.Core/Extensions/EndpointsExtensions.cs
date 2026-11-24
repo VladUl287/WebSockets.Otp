@@ -2,17 +2,17 @@
 
 namespace WebSockets.Otp.Core.Extensions;
 
-public static class EndpointsExtensions
+internal static class EndpointsExtensions
 {
-    public static bool IsWsEndpoint(this Type type) =>
+    internal static bool IsWsEndpoint(this Type type) =>
         type is { IsAbstract: false, IsInterface: false, IsClass: true, IsPublic: true } &&
         typeof(IWsEndpoint).IsAssignableFrom(type);
 
-    internal static Type? GetBaseEndpointType(this Type type)
+    internal static Type GetBaseEndpointType(this Type type)
     {
-        Type? current = type;
+        var current = type;
 
-        while (current is not null)
+        while (true)
         {
             if (current.IsGenericType && current.GetGenericTypeDefinition() == typeof(WsEndpoint<,>))
                 return current;
@@ -23,9 +23,8 @@ public static class EndpointsExtensions
             if (current == typeof(WsEndpoint))
                 return current;
 
-            current = current.BaseType;
+            current = current.BaseType
+                ?? throw new NotSupportedException($"Type {current} does not inherit from WsEndpoint");
         }
-
-        return null;
     }
 }

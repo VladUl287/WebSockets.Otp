@@ -1,34 +1,34 @@
-﻿using System.Runtime.CompilerServices;
+﻿using Microsoft.Extensions.DependencyInjection;
 using WebSockets.Otp.Abstractions.Connection;
 using WebSockets.Otp.Abstractions.Endpoints;
 using WebSockets.Otp.Core.Extensions;
 
 namespace WebSockets.Otp.Core.Services.Endpoints;
 
-public sealed class RequestResponseEndpointInvoker<TRequest, TResponse> : IEndpointInvoker
+public sealed class RequestResponseEndpointInvoker<TWsEndpoint, TRequest, TResponse> : IEndpointInvoker
+    where TWsEndpoint : WsEndpoint<TRequest, TResponse>
     where TRequest : notnull
     where TResponse : notnull
 {
-    public async Task Invoke(object endpoint, IEndpointContext context)
+    public async Task Invoke(IEndpointContext context)
     {
-        var typedEndpoint = Unsafe.As<WsEndpoint<TRequest, TResponse>>(endpoint);
-
         var connection = context.Connection;
-        var serializer = connection.Serializer;
-        var payload = context.Message;
         var token = context.Token;
-
         var correlationId = context.MessageHeaders.CorrelationId;
-        var request = serializer.Deserialize<TRequest>(payload);
+
+        var request = connection.Serializer.Deserialize<TRequest>(context.Message);
         if (request is null)
         {
             await context.Manager.TrySendErrorAsync(
-                connection.Id, correlationId, WsErrorCode.InvalidPayload, $"Deserialization returned null for {typeof(TRequest).Name} at endpoint {endpoint.GetType().Name}.", token);
+                connection.Id, correlationId, WsErrorCode.InvalidPayload, $"Deserialization returned null for {typeof(TRequest).Name} at endpoint {typeof(TWsEndpoint).Name}.", token);
             return;
         }
 
-        var response = await typedEndpoint.HandleAsync(request, context);
+        var response = await context.Services
+            .GetRequiredService<TWsEndpoint>()
+            .HandleAsync(request, context);
+
         var envelope = new ResponseMessage(correlationId, response);
-        await context.Manager.Send(connection.Id, envelope, context.Token);
+        await context.Manager.Send(connection.Id, envelope, token);
     }
 }

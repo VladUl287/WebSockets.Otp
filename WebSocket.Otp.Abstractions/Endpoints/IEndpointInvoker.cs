@@ -2,5 +2,5 @@
 
 public interface IEndpointInvoker
 {
-    Task Invoke(object endpoint, IEndpointContext context);
+    Task Invoke(IEndpointContext context);
 }

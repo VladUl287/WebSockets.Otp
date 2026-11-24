@@ -133,7 +133,6 @@ public static class ServiceCollectionExtensions
     private static IServiceCollection AddEndpoints(this IServiceCollection services, params Assembly[] assemblies)
     {
         services.AddSingleton<IContextFactory, DefaultContextFactory>();
-
         services.AddSingleton<IEndpointAuthorizer, EndpointAuthorizer>();
 
         var endpointsTypes = assemblies
@@ -166,47 +165,54 @@ public static class ServiceCollectionExtensions
         }
 
         var endpoints = endpointsTypes
-            .Select((t) =>
+            .Select((endpointType) =>
             {
-                var authAttrs = t.GetCustomAttributes<AuthorizeAttribute>();
-                var endpointAttr = t.GetCustomAttribute<WsEndpointAttribute>();
+                var authAttrs = endpointType.GetCustomAttributes<AuthorizeAttribute>();
+                var endpointAttr = endpointType.GetCustomAttribute<WsEndpointAttribute>()
+                    ?? throw new NullReferenceException();
+                var endpointBaseType = endpointType.GetBaseEndpointType();
 
-                var baseType = t.GetBaseEndpointType() ??
-                    throw new NotSupportedException($"Type {t} does not inherit from WsEndpoint");
+                IEndpointInvoker? invoker = null;
 
-                IEndpointInvoker invoker = new EmptyEndpointInvoker();
-
-                if (baseType.IsGenericType)
+                if (endpointBaseType.IsGenericType)
                 {
-                    var genericArgs = baseType.GetGenericArguments();
+                    var genericArgs = endpointBaseType.GetGenericArguments();
 
                     if (genericArgs.Length == 2)
                     {
                         if (genericArgs[1].IsGenericType && genericArgs[1].GetGenericTypeDefinition() == typeof(Result<,>))
                         {
                             var resultArgs = genericArgs[1].GetGenericArguments();
-                            var invokerType = typeof(RequestTypedResponseEndpointInvoker<,,>)
-                                .MakeGenericType(genericArgs[0], resultArgs[0], resultArgs[1]);
-                            invoker = (IEndpointInvoker)Activator.CreateInstance(invokerType)!;
+                            var invokerType = typeof(RequestTypedResponseEndpointInvoker<,,,>)
+                                .MakeGenericType(endpointType, genericArgs[0], resultArgs[0], resultArgs[1]);
+                            invoker = (IEndpointInvoker?)Activator.CreateInstance(invokerType);
                         }
                         else
                         {
-                            var invokerType = typeof(RequestResponseEndpointInvoker<,>).MakeGenericType(genericArgs[0], genericArgs[1]);
-                            invoker = (IEndpointInvoker)Activator.CreateInstance(invokerType)!;
+                            var invokerType = typeof(RequestResponseEndpointInvoker<,,>).MakeGenericType(endpointType, genericArgs[0], genericArgs[1]);
+                            invoker = (IEndpointInvoker?)Activator.CreateInstance(invokerType);
                         }
                     }
                     else if (genericArgs.Length == 1)
                     {
-                        var invokerType = typeof(RequestEndpointInvoker<>).MakeGenericType(genericArgs[0]);
-                        invoker = (IEndpointInvoker)Activator.CreateInstance(invokerType)!;
+                        var invokerType = typeof(RequestEndpointInvoker<,>).MakeGenericType(endpointType, genericArgs[0]);
+                        invoker = (IEndpointInvoker?)Activator.CreateInstance(invokerType);
                     }
                 }
+                else
+                {
+                    var invokerType = typeof(EmptyEndpointInvoker<>).MakeGenericType(endpointType);
+                    invoker = (IEndpointInvoker?)Activator.CreateInstance(invokerType);
+                }
+
+                if (invoker is null)
+                    throw new NullReferenceException($"Could not resolve Endpoint invoker based on type ${endpointType.Name}");
 
                 return new WsEndpointInfo
                 {
-                    Key = endpointAttr!.Key,
+                    Key = endpointAttr.Key,
                     Scope = endpointAttr.Scope,
-                    Type = t,
+                    Type = endpointType,
                     Metadata = authAttrs?.Count() is > 0 ? new EndpointMetadataCollection(authAttrs) : [],
                     Invoker = invoker
                 };

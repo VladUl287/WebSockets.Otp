@@ -24,12 +24,12 @@ public sealed class ChatSendEndpoint :
             ChatId = request.ChatId,
         };
 
-        await ctx.Send
-           .All()
-           .SendAsync("notify/message/receive", new
-           {
-               Message = request.Content
-           }, default);
+        //await ctx.Send
+        //   .All()
+        //   .SendAsync("notify/message/receive", new
+        //   {
+        //       Message = request.Content
+        //   }, default);
 
         return result;
     }

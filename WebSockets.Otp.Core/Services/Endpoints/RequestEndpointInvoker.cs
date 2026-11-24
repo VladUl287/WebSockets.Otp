@@ -1,22 +1,20 @@
-﻿using System.Runtime.CompilerServices;
+﻿using Microsoft.Extensions.DependencyInjection;
 using WebSockets.Otp.Abstractions.Endpoints;
 
 namespace WebSockets.Otp.Core.Services.Endpoints;
 
-public sealed class RequestEndpointInvoker<TRequest> : IEndpointInvoker
+public sealed class RequestEndpointInvoker<TWsEndpoint, TRequest> : IEndpointInvoker
+    where TWsEndpoint : WsEndpoint<TRequest>
     where TRequest : notnull
 {
-    public Task Invoke(object endpoint, IEndpointContext context)
+    public Task Invoke(IEndpointContext context)
     {
-        var typedEndpoint = Unsafe.As<WsEndpoint<TRequest>>(endpoint);
-
-        var connection = context.Connection;
-        var serializer = connection.Serializer;
-
-        var request = serializer.Deserialize<TRequest>(context.Message) ??
+        var request = context.Connection.Serializer.Deserialize<TRequest>(context.Message) ??
              throw new NullReferenceException(
-                $"Deserialization returned null for {typeof(TRequest).Name} at endpoint {endpoint.GetType().Name}.");
+                $"Deserialization returned null for {typeof(TRequest).Name} at endpoint {typeof(TWsEndpoint).Name}.");
 
-        return typedEndpoint.HandleAsync(request, context);
+        return context.Services
+            .GetRequiredService<TWsEndpoint>()
+            .HandleAsync(request, context);
     }
 }

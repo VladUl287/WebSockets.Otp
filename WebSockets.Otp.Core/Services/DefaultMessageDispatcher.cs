@@ -50,9 +50,8 @@ public class DefaultMessageDispatcher(
                 }
             }
 
-            var endpoint = services.GetRequiredService(endpointInfo.Type);
             var endpointContext = contextFactory.Create(context, services, endpointInfo, headers, token);
-            await endpointInfo.Invoker.Invoke(endpoint, endpointContext);
+            await endpointInfo.Invoker.Invoke(endpointContext);
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested)
         {

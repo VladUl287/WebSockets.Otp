@@ -1,15 +1,15 @@
-﻿using System.Runtime.CompilerServices;
+﻿using Microsoft.Extensions.DependencyInjection;
 using WebSockets.Otp.Abstractions.Endpoints;
-using WebSockets.Otp.Core.Models;
 
 namespace WebSockets.Otp.Core.Services.Endpoints;
 
-public sealed class EmptyEndpointInvoker : IEndpointInvoker
+public sealed class EmptyEndpointInvoker<TWsEndpoint> : IEndpointInvoker
+    where TWsEndpoint : WsEndpoint
 {
-    public Task Invoke(object endpoint, IEndpointContext context)
+    public Task Invoke(IEndpointContext context)
     {
-        var typedEndpoint = Unsafe.As<WsEndpoint>(endpoint);
-        var typedContext = Unsafe.As<EndpointContext>(context);
-        return typedEndpoint.HandleAsync(typedContext);
+        return context.Services
+            .GetRequiredService<TWsEndpoint>()
+            .HandleAsync(context);
     }
 }
