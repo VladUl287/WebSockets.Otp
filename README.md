@@ -9,61 +9,84 @@ A minimal WebSocket library for ASP.NET Core inspired by REPR principles. Provid
 
 ### Quick Start
 
-#### 1. Install
+## Install Package
 
 ```sh
 dotnet add package WebSockets.Otp.Core
 ```
 
-#### 2. Define your endpoint
+## Configure Services
 
 ```cs
-[WsEndpoint("chat/message/send")]
-public class ChatEndpoint : WsEndpoint<ChatMessage>
-{
-    public override async Task HandleAsync(ChatMessage message, IEndpointContext context)
-    {
-        await context.Send
-            .Group("general-chat")
-            .SendAsync("chat/message/receive", message, default);
-    }
-}
-
-public class ChatMessage
-{
-    public string Username { get; set; }
-    public string Message { get; set; }
-}
-```
-
-#### 3. Configure services
-
-```cs
-// Program.cs
+var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddWsEndpoints();
 
+var app = builder.Build();
 app.MapEndpoints(
     "/ws",
     (opt) =>
     {
         opt.OnConnected = async (context) =>
         {
-            await context.Groups.AddAsync("general-chat", context.Connection.Id);
+            await context.Manager.AddToGroup("general-chat", context.Connection.Id, default);
         };
         opt.OnDisconnected = async (context) =>
         {
-            await context.Groups.RemoveAsync("general-chat", context.Connection.Id);
+            await context.Manager.RemoveFromGroup("general-chat", context.Connection.Id, default);
         };
     });
 ```
 
-#### 4. Install client
+## Add Request DTO
+
+```cs
+public class ChatMessage
+{
+    public string Username { get; set; }
+    public string Text { get; set; }
+}
+```
+
+## Add Response DTO
+
+```cs
+public class ChatMessageSent
+{
+    public Guid MessageId { get; set; }
+    public DateTimeOffset SentAt { get; set; }
+}
+```
+
+## Define your endpoint
+
+```cs
+[WsEndpoint("chat/message/send")]
+public class SendChatMessageEndpoint : WsEndpoint<ChatMessage, ChatMessageSent>
+{
+    public override async Task<ChatMessageSent> HandleAsync(ChatMessage message, IEndpointContext context)
+    {
+        var sent = new ChatMessageSent
+        {
+            MessageId = Guid.NewGuid(),
+            SentAt = DateTimeOffset.UtcNow,
+        };
+
+        await context.Send
+            .Group("general-chat")
+            .SendAsync("chat/message/receive", message, default);
+
+        return sent;
+    }
+}
+```
+
+## Install Client
 
 ```sh
 npm i websockets.otp.js
 ```
 
-#### 5. Configure client
+## Configure Client
 
 ```js
 const client = useWsClient({
@@ -72,16 +95,19 @@ const client = useWsClient({
 
 await client.connect()
 
-type Message = { username: string, message: string }
+type ChatMessage = { username: string, message: string }
+type ChatMessageSent = { messageId: string, sentAt: string }
 
-const off = client.receive<Message>('chat/message/receive', (msg) => {
+const off = client.receive<ChatMessage>('chat/message/receive', (msg) => {
     console.log(msg.message) // test message
 })
 
-await client.notify<Message>(
+const { messageId, sentAt } = await client.send<ChatMessage, ChatMessageSent>(
     'chat/message/send',
     {
         username: "user1",
         message: "test message",
     })
+
+console.log(messageId, sentAt)
 ```
