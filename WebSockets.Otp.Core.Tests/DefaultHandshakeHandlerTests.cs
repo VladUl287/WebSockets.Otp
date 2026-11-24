@@ -81,6 +81,7 @@ public sealed class DefaultHandshakeHandlerTests
         var result = await handler.HandleAsync(socket.Object, DefaultOptions(), CancellationToken.None);
 
         Assert.True(result.IsError);
+        Assert.Equal("Handshake failed: no initial message received.", result.Error.Value);
         socket.Verify(
             s => s.SendAsync(
                 It.IsAny<ReadOnlyMemory<byte>>(),
@@ -99,12 +100,13 @@ public sealed class DefaultHandshakeHandlerTests
         var mocks = new Mocks();
         var handler = CreateHandler(mocks);
         var buffer = CreateBuffer("null");
-        StubEnumerator(mocks, OneItem<IMessageBuffer>(buffer.Object));
+        StubEnumerator(mocks, OneItem(buffer.Object));
 
         var socket = CreateSocket();
         var result = await handler.HandleAsync(socket.Object, DefaultOptions(), CancellationToken.None);
 
         Assert.True(result.IsError);
+        Assert.Equal("Handshake failed: could not deserialize handshake options.", result.Error.Value);
         socket.Verify(
             s => s.SendAsync(
                 It.IsAny<ReadOnlyMemory<byte>>(),
@@ -121,7 +123,7 @@ public sealed class DefaultHandshakeHandlerTests
         var mocks = new Mocks();
         var handler = CreateHandler(mocks);
         var buffer = CreateBuffer("this is definitely not json");
-        StubEnumerator(mocks, OneItem<IMessageBuffer>(buffer.Object));
+        StubEnumerator(mocks, OneItem(buffer.Object));
 
         var socket = CreateSocket();
 
@@ -144,7 +146,7 @@ public sealed class DefaultHandshakeHandlerTests
         var mocks = new Mocks();
         var handler = CreateHandler(mocks);
         var buffer = CreateBuffer("""{"protocol":"unknown"}""");
-        StubEnumerator(mocks, OneItem<IMessageBuffer>(buffer.Object));
+        StubEnumerator(mocks, OneItem(buffer.Object));
 
         IMessageSerializer? unused = null;
         mocks.Store.Setup(s => s.TryGet("unknown", out unused)).Returns(false);
@@ -153,6 +155,7 @@ public sealed class DefaultHandshakeHandlerTests
         var result = await handler.HandleAsync(socket.Object, DefaultOptions(), CancellationToken.None);
 
         Assert.True(result.IsError);
+        Assert.Equal($"Handshake failed: unsupported transfer protocol 'unknown'.", result.Error.Value);
         socket.Verify(
             s => s.SendAsync(
                 It.IsAny<ReadOnlyMemory<byte>>(),
@@ -240,7 +243,7 @@ public sealed class DefaultHandshakeHandlerTests
         mocks.Enumerator
             .Setup(e => e.EnumerateAsync(It.IsAny<WebSocket>(), It.IsAny<WsOptions>(), It.IsAny<CancellationToken>()))
             .Callback<WebSocket, WsOptions, CancellationToken>((_, _, t) => enumeratorToken = t)
-            .Returns(OneItem<IMessageBuffer>(buffer.Object));
+            .Returns(OneItem(buffer.Object));
 
         IMessageSerializer? serializer = Mock.Of<IMessageSerializer>();
         mocks.Store.Setup(s => s.TryGet("json", out serializer)).Returns(true);
@@ -264,7 +267,7 @@ public sealed class DefaultHandshakeHandlerTests
         var mocks = new Mocks();
         var handler = CreateHandler(mocks);
         var buffer = CreateBuffer("""{"protocol":"json"}""");
-        StubEnumerator(mocks, OneItem<IMessageBuffer>(buffer.Object));
+        StubEnumerator(mocks, OneItem(buffer.Object));
 
         IMessageSerializer? serializer = Mock.Of<IMessageSerializer>();
         mocks.Store.Setup(s => s.TryGet("json", out serializer)).Returns(true);
