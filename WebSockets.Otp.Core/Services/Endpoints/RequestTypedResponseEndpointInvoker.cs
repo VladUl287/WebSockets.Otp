@@ -1,17 +1,19 @@
 ﻿using System.Runtime.CompilerServices;
 using WebSockets.Otp.Abstractions.Connection;
 using WebSockets.Otp.Abstractions.Endpoints;
+using WebSockets.Otp.Abstractions.Utils;
 using WebSockets.Otp.Core.Extensions;
 
 namespace WebSockets.Otp.Core.Services.Endpoints;
 
-public sealed class RequestTypedResponseEndpointInvoker<TRequest, TResponse> : IEndpointInvoker
+public sealed class RequestTypedResponseEndpointInvoker<TRequest, TResponse1, TResponse2> : IEndpointInvoker
     where TRequest : notnull
-    where TResponse : notnull
+    where TResponse1 : notnull
+    where TResponse2 : notnull
 {
     public async Task Invoke(object endpoint, IEndpointContext context)
     {
-        var typedEndpoint = Unsafe.As<WsEndpoint<TRequest, EndpointResult<TResponse>>>(endpoint);
+        var typedEndpoint = Unsafe.As<WsEndpoint<TRequest, Result<TResponse1, TResponse2>>>(endpoint);
 
         var connection = context.Connection;
         var serializer = connection.Serializer;
@@ -30,12 +32,12 @@ public sealed class RequestTypedResponseEndpointInvoker<TRequest, TResponse> : I
         var response = await typedEndpoint.HandleAsync(request, context);
         if (response.IsError)
         {
-            await context.Manager.TrySendErrorAsync(
-                connection.Id, correlationId, WsErrorCode.HandlerFailed, response.Error, token);
+            var errorResponse = new ResponseMessage(correlationId, response.Error);
+            await context.Manager.Send(connection.Id, errorResponse, token);
             return;
         }
 
-        var value = new ResponseMessage(correlationId, response.Value);
-        await context.Manager.Send(connection.Id, value, context.Token);
+        var successResponse = new ResponseMessage(correlationId, response.Value);
+        await context.Manager.Send(connection.Id, successResponse, token);
     }
 }

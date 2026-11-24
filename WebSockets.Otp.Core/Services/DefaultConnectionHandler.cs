@@ -63,7 +63,7 @@ public sealed class DefaultConnectionHandler(
             }
 
             logger.HandshakeCompleted(protocol, context);
-            return Result<IMessageSerializer, Error>.Ok(serializer);
+            return Result<IMessageSerializer, Error>.Success(serializer);
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested)
         {

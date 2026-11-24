@@ -182,10 +182,11 @@ public static class ServiceCollectionExtensions
 
                     if (genericArgs.Length == 2)
                     {
-                        if (genericArgs[1].IsGenericType && genericArgs[1].GetGenericTypeDefinition() == typeof(EndpointResult<>))
+                        if (genericArgs[1].IsGenericType && genericArgs[1].GetGenericTypeDefinition() == typeof(Result<,>))
                         {
-                            var invokerType = typeof(RequestTypedResponseEndpointInvoker<,>)
-                                .MakeGenericType(genericArgs[0], genericArgs[1].GetGenericArguments()[0]);
+                            var resultArgs = genericArgs[1].GetGenericArguments();
+                            var invokerType = typeof(RequestTypedResponseEndpointInvoker<,,>)
+                                .MakeGenericType(genericArgs[0], resultArgs[0], resultArgs[1]);
                             invoker = (IEndpointInvoker)Activator.CreateInstance(invokerType)!;
                         }
                         else

@@ -62,7 +62,7 @@ public sealed class DefaultConnectionHandlerTests
     }
 
     private static Result<WsHandshakeOptions, Error<string>> HandshakeOk(string protocol)
-        => Result<WsHandshakeOptions, Error<string>>.Ok(new WsHandshakeOptions(protocol));
+        => Result<WsHandshakeOptions, Error<string>>.Success(new WsHandshakeOptions(protocol));
 
     private static Result<WsHandshakeOptions, Error<string>> HandshakeFail(string result = null)
     {
