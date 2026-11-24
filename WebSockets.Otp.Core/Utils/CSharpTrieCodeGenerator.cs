@@ -4,11 +4,7 @@ namespace WebSockets.Otp.Core.Utils;
 
 public static class CSharpTrieCodeGenerator
 {
-    private sealed class Value(byte[] bytes, int index)
-    {
-        public byte[] Bytes { get; } = bytes; 
-        public int Index { get; } = index;
-    }
+    private sealed record Value(byte[] Bytes, int Index);
 
     public static string GenerateTrie(byte[][] values)
     {
