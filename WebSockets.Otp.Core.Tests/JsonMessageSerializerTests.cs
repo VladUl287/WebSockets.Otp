@@ -91,7 +91,7 @@ public sealed class JsonMessageSerializerTests
         var root = doc.RootElement;
 
         Assert.Equal(7u, root.GetProperty("id").GetUInt32());
-        Assert.Equal(3, root.GetProperty("code").GetInt32());
+        Assert.Equal((int)WsErrorCode.Unauthorized, root.GetProperty("code").GetInt32());
         Assert.Equal("nope", root.GetProperty("message").GetString());
     }
 

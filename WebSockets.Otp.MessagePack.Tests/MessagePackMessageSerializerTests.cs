@@ -89,7 +89,7 @@ public sealed class MessagePackMessageSerializerTests
         Assert.Equal(3, reader.ReadArrayHeader());
         Assert.Equal(Convert.ToUInt32(MessageType.Error.Value), reader.ReadUInt32());
         Assert.Equal(7u, reader.ReadUInt32());
-        Assert.Equal(3, reader.ReadInt32());
+        Assert.Equal((int)WsErrorCode.Unauthorized, reader.ReadInt32());
         Assert.Equal("nope", reader.ReadString());
     }
 
