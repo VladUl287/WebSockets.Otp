@@ -359,6 +359,110 @@ public sealed class DefaultConnectionHandlerTests
     }
 
     [Fact]
+    public async Task HandleAsync_WhenOnConnectedHookThrow_StillRemovesConnectionAndRunsOnDisconnected()
+    {
+        var (context, _) = CreateWebSocketContext();
+        var mocks = new Mocks();
+        var handler = CreateHandler(mocks);
+
+        var onConnected = 0;
+        var onDisconnected = 0;
+        var options = new WsOptions(new WsConfig
+        {
+            OnConnected = _ => { onConnected++; throw new InvalidOperationException("boom"); },
+            OnDisconnected = _ => { onDisconnected++; return Task.CompletedTask; },
+        });
+
+        var serializer = new Mock<IMessageSerializer>().Object;
+        var connection = new Mock<IWsConnection>();
+        var connectionId = Guid.NewGuid().ToString();
+        connection.SetupGet(c => c.Id).Returns(connectionId);
+        var globalContext = new Mock<IGlobalContext>().Object;
+
+        mocks.HandshakeService
+            .Setup(h => h.HandleAsync(It.IsAny<WebSocket>(), It.IsAny<WsOptions>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(HandshakeOk("json"));
+        mocks.SerializerStore
+            .Setup(s => s.TryGet("json", out serializer))
+            .Returns(true);
+        mocks.ConnectionFactory
+            .Setup(f => f.Create(It.IsAny<WebSocket>(), serializer))
+            .Returns(connection.Object);
+        mocks.ConnectionManager
+            .Setup(m => m.TryAdd(connection.Object, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+        mocks.ConnectionManager
+            .Setup(m => m.TryRemove(connectionId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+        mocks.ContextFactory
+            .Setup(c => c.CreateGlobal(connection.Object, It.IsAny<HttpContext>(), It.IsAny<WebSocket>()))
+            .Returns(globalContext);
+        mocks.MessageProcessor
+            .Setup(p => p.Process(globalContext, serializer, options, It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => handler.HandleAsync(context, options));
+
+        Assert.Equal("boom", ex.Message);
+        Assert.Equal(1, onConnected);
+        Assert.Equal(1, onDisconnected);
+        mocks.ConnectionManager.Verify(m => m.TryRemove(connectionId, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task HandleAsync_WhenOnDisconnectedHookThrow_StillRemovesConnection()
+    {
+        var (context, _) = CreateWebSocketContext();
+        var mocks = new Mocks();
+        var handler = CreateHandler(mocks);
+
+        var onConnected = 0;
+        var onDisconnected = 0;
+        var options = new WsOptions(new WsConfig
+        {
+            OnConnected = _ => { onConnected++; return Task.CompletedTask; },
+            OnDisconnected = _ => { onDisconnected++; throw new InvalidOperationException("boom"); },
+        });
+
+        var serializer = new Mock<IMessageSerializer>().Object;
+        var connection = new Mock<IWsConnection>();
+        var connectionId = Guid.NewGuid().ToString();
+        connection.SetupGet(c => c.Id).Returns(connectionId);
+        var globalContext = new Mock<IGlobalContext>().Object;
+
+        mocks.HandshakeService
+            .Setup(h => h.HandleAsync(It.IsAny<WebSocket>(), It.IsAny<WsOptions>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(HandshakeOk("json"));
+        mocks.SerializerStore
+            .Setup(s => s.TryGet("json", out serializer))
+            .Returns(true);
+        mocks.ConnectionFactory
+            .Setup(f => f.Create(It.IsAny<WebSocket>(), serializer))
+            .Returns(connection.Object);
+        mocks.ConnectionManager
+            .Setup(m => m.TryAdd(connection.Object, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+        mocks.ConnectionManager
+            .Setup(m => m.TryRemove(connectionId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+        mocks.ContextFactory
+            .Setup(c => c.CreateGlobal(connection.Object, It.IsAny<HttpContext>(), It.IsAny<WebSocket>()))
+            .Returns(globalContext);
+        mocks.MessageProcessor
+            .Setup(p => p.Process(globalContext, serializer, options, It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => handler.HandleAsync(context, options));
+
+        Assert.Equal("boom", ex.Message);
+        Assert.Equal(1, onConnected);
+        Assert.Equal(1, onDisconnected);
+        mocks.ConnectionManager.Verify(m => m.TryRemove(connectionId, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
     public void WsConfig_HasSensibleDefaults()
     {
         var config = new WsConfig();
