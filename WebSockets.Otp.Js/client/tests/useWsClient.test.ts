@@ -248,31 +248,33 @@ describe("useWsClient", () => {
                 socketFactory: () => socket as unknown as WebSocket,
             })
             const p = client.connect()
+            const assertion = expect(p).rejects.toThrow("Handshake response has invalid format")
             socket.triggerOpen()
             await flush()
             socket.triggerMessage(JSON.stringify({ not: "empty" }))
             await flush()
-            await expect(p).rejects.toThrow("Handshake response has invalid format")
+            await assertion
         })
 
-        // it("rejects when handshake deserialization fails", async () => {
-        //     const socket = new MockWebSocket("ws://test")
-        //     const serializer = createSerializer()
-        //         ; (serializer.deserialize as vitest.Mock).mockImplementation(() => {
-        //             throw new Error("bad json")
-        //         })
-        //     const client = useWsClient({
-        //         url: "ws://test",
-        //         handshakeSerializer: serializer,
-        //         socketFactory: () => socket as unknown as WebSocket,
-        //     })
-        //     const p = client.connect()
-        //     socket.triggerOpen()
-        //     await flush()
-        //     socket.triggerMessage("not-json")
-        //     await flush()
-        //     await expect(p).rejects.toThrow()
-        // })
+        it("rejects when handshake deserialization fails", async () => {
+            const socket = new MockWebSocket("ws://test")
+            const serializer = createSerializer();
+            (serializer.deserialize as any).mockImplementation(() => {
+                throw new Error("bad json")
+            })
+            const client = useWsClient({
+                url: "ws://test",
+                handshakeSerializer: serializer,
+                socketFactory: () => socket as unknown as WebSocket,
+            })
+            const p = client.connect()
+            const assertion = expect(p).rejects.toThrow()
+            socket.triggerOpen()
+            await flush()
+            socket.triggerMessage("not-json")
+            await flush()
+            await assertion
+        })
 
         it("throws when no global WebSocket and no factory is provided", async () => {
             ; (globalThis as any).WebSocket = undefined
@@ -426,14 +428,14 @@ describe("useWsClient", () => {
             await expect(sendPromise).resolves.toEqual({ hello: "world" })
         })
 
-        // it("throws synchronously when serialization fails", async () => {
-        //     const serializer = createSerializer()
-        //         ; (serializer.serializeRequest as vitest.Mock).mockImplementationOnce(() => {
-        //             throw new Error("serialize-err")
-        //         })
-        //     const { client } = await connected({ serializer })
-        //     expect(() => client.send("foo", "bar")).toThrow("serialize-err")
-        // })
+        it("throws synchronously when serialization fails", async () => {
+            const serializer = createSerializer()
+                ; (serializer.serializeRequest as any).mockImplementationOnce(() => {
+                    throw new Error("serialize-err")
+                })
+            const { client } = await connected({ serializer })
+            expect(() => client.send("foo", "bar")).toThrow("serialize-err")
+        })
 
         it("rejects when socket.send throws", async () => {
             const { client, socket } = await connected()
@@ -447,6 +449,9 @@ describe("useWsClient", () => {
             const { client, socket } = await connected()
             const sendPromise = client.send<string, string>("foo", "bar")
             const request = JSON.parse(socket.sent[1])
+
+            const assertion = expect(sendPromise).rejects.toBeInstanceOf(WsError)
+
             socket.triggerMessage(
                 JSON.stringify({
                     type: MessageType.error,
@@ -455,8 +460,9 @@ describe("useWsClient", () => {
                     message: "handler failed",
                 }),
             )
+
             await flush()
-            await expect(sendPromise).rejects.toBeInstanceOf(WsError)
+            await assertion
         })
 
         it("assigns distinct correlation ids", async () => {
