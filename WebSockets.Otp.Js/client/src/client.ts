@@ -62,24 +62,37 @@ export const useWsClient = (options: WsClientOptions): WsClient => {
         return new Promise<void>((resolve, reject) => {
             let socket: WebSocket
 
+            const detach = (s: WebSocket) => {
+                s.onopen = null
+                s.onmessage = null
+                s.onerror = null
+                s.onclose = null
+            }
+
             const onConnectError = (): void => {
+                ws && detach(ws)
+                ws = null
                 state = "disconnected"
+                const error = new Error("WebSocket connection error")
+                pending.rejectAll(error)
                 if (schedule) {
                     schedule.run(connect).then(resolve, reject)
                     return
                 }
-                const error = new Error("WebSocket connection error")
+                rejectQueue(error)
                 reject(error)
             }
 
             const onRuntimeError = (): void => {
+                ws && detach(ws)
                 state = "disconnected"
+                const error = new Error("WebSocket runtime error")
+                pending.rejectAll(error)
                 if (schedule) {
                     schedule.run(connect)
                     return
                 }
-                const error = new Error("WebSocket runtime error")
-                pending.rejectAll(error)
+                rejectQueue(error)
             }
 
             try {
@@ -112,18 +125,20 @@ export const useWsClient = (options: WsClientOptions): WsClient => {
             socket.onmessage = (ev) => handleHandshakeMessage(ev.data as string | BufferSource | Blob)
             socket.onerror = onConnectError
             socket.onclose = (ev: { code: number; reason: string }): void => {
+                detach(socket)
+                ws = null
+
                 state = "disconnected"
 
                 const error = new Error(`Connection closed (code ${ev.code})`)
                 pending.rejectAll(error)
-
-                ws = null
 
                 if (!manuallyClosed && schedule) {
                     schedule.run(connect).then(resolve, reject)
                     return
                 }
 
+                rejectQueue(error)
                 reject(error)
             }
         })
