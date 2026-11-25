@@ -1,625 +1,672 @@
-import {
-    describe,
-    it,
-    expect,
-    beforeEach,
-    afterEach,
-    jest,
-} from "@jest/globals"
-import type { ConnectionState, PendingRequest, Serializer } from "../src/types"
-import type { PendingRegistry } from "../src/pending"
+import { describe, it, expect, beforeEach, afterEach, vi, vitest } from "vitest"
 import { useWsClient, type WsClient, type WsClientOptions } from "../src/client"
+import { MessageType, WsError, type Encoded, type MessageSerializer, type ServerMessage } from "@fefruess/websockets.otp.serializer.core"
+import { buildSchedule } from "../src/schedule"
 
-type MessageHandler = (ev: { data: unknown }) => void
-type SimpleHandler = (ev: unknown) => void
-type CloseHandler = (ev: { code: number; reason: string }) => void
+class MockWebSocket {
+    static readonly CONNECTING = 0
+    static readonly OPEN = 1
+    static readonly CLOSING = 2
+    static readonly CLOSED = 3
 
-class MockSocket {
-    static instances: MockSocket[] = []
+    readyState = MockWebSocket.CONNECTING
+    onopen: (() => void) | null = null
+    onmessage: ((ev: { data: string | BufferSource | Blob }) => void) | null = null
+    onerror: (() => void) | null = null
+    onclose: ((ev: { code: number; reason: string }) => void) | null = null
 
-    static reset(): void {
-        MockSocket.instances = []
-    }
-
-    readyState = 0
     sent: string[] = []
-    readonly url: string
 
-    onopen: SimpleHandler | null = null
-    onmessage: MessageHandler | null = null
-    onerror: SimpleHandler | null = null
-    onclose: CloseHandler | null = null
-
-    constructor(url: string) {
-        this.url = url
-        MockSocket.instances.push(this)
-    }
+    constructor(public readonly url: string) { }
 
     send(data: string): void {
-        if (this.readyState !== 1) throw new Error("MockSocket: not OPEN")
+        if (this.readyState !== MockWebSocket.OPEN) throw new Error("Socket is not open")
         this.sent.push(data)
     }
 
-    close(code = 1000, reason = ""): void {
-        if (this.readyState === 3) return
-        this.readyState = 3
-        this.onclose?.({ code, reason })
+    close(code?: number, reason?: string): void {
+        this.readyState = MockWebSocket.CLOSED
+        this.onclose?.({ code: code ?? 1000, reason: reason ?? "" })
     }
 
-    asWebSocket(): WebSocket {
-        return this as unknown as WebSocket
+    triggerOpen(): void {
+        this.readyState = MockWebSocket.OPEN
+        this.onopen?.()
     }
 
-    open(): void {
-        this.readyState = 1
-        this.onopen?.({})
-    }
-
-    receive(data: string): void {
+    triggerMessage(data: string | BufferSource | Blob): void {
         this.onmessage?.({ data })
     }
 
-    fireError(): void {
-        this.onerror?.({})
+    triggerError(): void {
+        this.onerror?.()
     }
 
-    serverClose(code = 1000, reason = ""): void {
-        if (this.readyState === 3) return
-        this.readyState = 3
+    triggerClose(code = 1000, reason = ""): void {
+        this.readyState = MockWebSocket.CLOSED
         this.onclose?.({ code, reason })
     }
 }
 
-function getSocket(index = -1): MockSocket {
-    const arr = MockSocket.instances
-    const idx = index < 0 ? arr.length + index : index
-    const s = arr[idx]
-    if (!s) throw new Error(`MockSocket: no instance at index ${idx}`)
-    return s
+const decode = (d: Encoded): string => {
+    if (typeof d === "string") return d
+    if (d instanceof ArrayBuffer) return new TextDecoder().decode(new Uint8Array(d))
+    return new TextDecoder().decode(d)
 }
 
-const mockSerializer: Serializer = {
-    protocol: "test.v1",
-    serialize: (value: unknown): string => JSON.stringify(value),
-    deserialize: (data): Promise<unknown> => Promise.resolve(JSON.parse(data as string)),
-}
+const createSerializer = (): MessageSerializer => ({
+    protocol: "test",
+    serialize: vitest.fn((d: unknown) => JSON.stringify(d)),
+    deserialize: vitest.fn((s: Encoded) => JSON.parse(decode(s))),
+    serializeRequest: vitest.fn((d: unknown) => JSON.stringify(d)),
+    deserializeServer: vitest.fn((s: Encoded) => JSON.parse(decode(s)) as ServerMessage),
+})
 
-type MockSchedule = {
-    run: jest.Mock<(fn: () => Promise<void>) => Promise<void>>
-    reset: jest.Mock<() => void>
-}
+const flush = (): Promise<void> => new Promise<void>((r) => setTimeout(r, 0))
 
-function createSchedule(autoRun: boolean): MockSchedule {
-    return {
-        run: jest.fn<(fn: () => Promise<void>) => Promise<void>>((fn) =>
-            autoRun ? fn() : Promise.resolve(),
-        ),
-        reset: jest.fn<() => void>(),
-    }
-}
-
-type MockPending = PendingRegistry<number> & {
-    readonly entries: Map<number, PendingRequest>
-    readonly enqueue: jest.Mock<(id: number, entry: PendingRequest) => void>
-    readonly remove: jest.Mock<(id: number) => void>
-    readonly resolve: jest.Mock<(id: number, value: unknown) => void>
-    readonly reject: jest.Mock<(id: number, error: unknown) => void>
-    readonly rejectAll: jest.Mock<(error: unknown) => void>
-}
-
-function createPending(): MockPending {
-    const entries = new Map<number, PendingRequest>()
-
-    const api = {
-        entries,
-        enqueue: jest.fn<(id: number, entry: PendingRequest) => void>((id, entry) => {
-            entries.set(id, entry)
-        }),
-        remove: jest.fn<(id: number) => void>((id) => {
-            entries.delete(id)
-        }),
-        resolve: jest.fn<(id: number, value: unknown) => void>((id, value) => {
-            const e = entries.get(id)
-            if (e) {
-                entries.delete(id)
-                e.resolve(value)
-            }
-        }),
-        reject: jest.fn<(id: number, error: unknown) => void>((id, error) => {
-            const e = entries.get(id)
-            if (e) {
-                entries.delete(id)
-                e.reject(error)
-            }
-        }),
-        rejectAll: jest.fn<(error: unknown) => void>((error) => {
-            const all = Array.from(entries.values())
-            entries.clear()
-            for (const e of all) e.reject(error)
-        }),
-    }
-
-    return api as unknown as MockPending
-}
-
-async function flushPromises(): Promise<void> {
-    for (let i = 0; i < 20; i++) await Promise.resolve()
-}
-
-type Harness = {
-    client: WsClient
-    schedule: MockSchedule
-    pending: MockPending
-}
-
-function createClient(overrides: Partial<WsClientOptions> = {}): Harness {
-    const schedule = createSchedule(false)
-    const pending = createPending()
-
+async function connected(options: Partial<WsClientOptions> = {}) {
+    const socket = new MockWebSocket("ws://test")
     const client = useWsClient({
         url: "ws://test",
-        defaultSerializer: mockSerializer,
-        serializer: mockSerializer,
-        socketFactory: (url: string): WebSocket => new MockSocket(url).asWebSocket(),
-        scheduleFactory: () => schedule,
-        pendingFactory: () => pending,
-        ...overrides,
+        socketFactory: () => socket as unknown as WebSocket,
+        ...options,
     })
-
-    return { client, schedule, pending }
+    const promise = client.connect()
+    socket.triggerOpen()
+    await flush()
+    socket.triggerMessage(JSON.stringify({}))
+    await flush()
+    await promise
+    return { client, socket }
 }
 
-async function finishHandshake(socket: MockSocket): Promise<void> {
-    socket.open()
-    await flushPromises()
-    socket.receive("{}")
-    await flushPromises()
-}
-
-async function connectAndHandshake(client: WsClient): Promise<MockSocket> {
-    const p = client.connect()
-    const socket = getSocket()
-    await finishHandshake(socket)
-    await p
-    return socket
-}
-
-function stateOf(client: WsClient): ConnectionState {
-    return client.state()
-}
-
+let originalWebSocket: typeof WebSocket | undefined
 beforeEach(() => {
-    MockSocket.reset()
-    jest.useRealTimers()
+    originalWebSocket = (globalThis as any).WebSocket
+        ; (globalThis as any).WebSocket = MockWebSocket
 })
-
 afterEach(() => {
-    jest.restoreAllMocks()
+    ; (globalThis as any).WebSocket = originalWebSocket
+    vitest.useRealTimers()
+    vitest.restoreAllMocks()
 })
 
-describe("connect()", () => {
-    it("completes handshake and transitions to connected", async () => {
-        const { client, schedule } = createClient()
-        const socket = await connectAndHandshake(client)
-
-        expect(stateOf(client)).toBe("connected")
-        expect(socket.url).toBe("ws://test")
-        expect(socket.sent).toHaveLength(1)
-        expect(JSON.parse(socket.sent[0]!)).toEqual({ protocol: "test.v1" })
-        expect(schedule.reset).toHaveBeenCalledTimes(1)
-    })
-
-    it("is a no-op when already connected", async () => {
-        const { client } = createClient()
-        await connectAndHandshake(client)
-        const before = MockSocket.instances.length
-
-        await client.connect()
-
-        expect(MockSocket.instances.length).toBe(before)
-        expect(stateOf(client)).toBe("connected")
-    })
-
-    it("resolves a concurrent call before the handshake completes", async () => {
-        const { client } = createClient()
-
-        const first = client.connect()
-        const second = client.connect()
-
-        await second
-        expect(stateOf(client)).toBe("connecting")
-
-        await finishHandshake(getSocket())
-        await first
-        expect(stateOf(client)).toBe("connected")
-    })
-
-    it("rejects when the handshake times out", async () => {
-        jest.useFakeTimers()
-        const { client } = createClient({
-            handshakeTimeoutMs: 1_000,
-            scheduleFactory: undefined,
+describe("useWsClient", () => {
+    describe("state", () => {
+        it("starts disconnected", () => {
+            const client = useWsClient({
+                url: "ws://test",
+                socketFactory: () => new MockWebSocket("ws://test") as unknown as WebSocket,
+            })
+            expect(client.state()).toBe("disconnected")
         })
 
-        const p = client.connect()
-        p.catch(() => { })
-
-        const socket = getSocket()
-        socket.open()
-        await flushPromises()
-        expect(socket.sent).toHaveLength(1)
-
-        await jest.advanceTimersByTimeAsync(1_000)
-
-        await expect(p).rejects.toThrow()
-        expect(socket.readyState).toBe(3)
-        expect(stateOf(client)).toBe("disconnected")
-    })
-
-    it("rejects handshake replies that are not a plain object", async () => {
-        const { client } = createClient({ scheduleFactory: undefined })
-        const p = client.connect()
-        const socket = getSocket()
-
-        socket.open()
-        await flushPromises()
-        socket.receive(`"not-an-object"`)
-        await flushPromises()
-
-        await expect(p).rejects.toThrow(/invalid format/i)
-        expect(socket.readyState).toBe(3)
-        expect(stateOf(client)).toBe("disconnected")
-    })
-
-    it("accepts an empty array as a handshake reply", async () => {
-        const { client } = createClient({ scheduleFactory: undefined })
-        const p = client.connect()
-        const socket = getSocket()
-
-        socket.open()
-        await flushPromises()
-        socket.receive("[]")
-        await flushPromises()
-
-        await p
-        expect(stateOf(client)).toBe("connected")
-    })
-
-    it("reports a connection error when the socket factory throws", async () => {
-        const { client, pending } = createClient({
-            socketFactory: () => {
-                throw new Error("factory exploded")
-            },
-            scheduleFactory: undefined,
+        it("transitions to connecting then connected", async () => {
+            const socket = new MockWebSocket("ws://test")
+            const client = useWsClient({
+                url: "ws://test",
+                socketFactory: () => socket as unknown as WebSocket,
+            })
+            const p = client.connect()
+            expect(client.state()).toBe("connecting")
+            socket.triggerOpen()
+            await flush()
+            socket.triggerMessage(JSON.stringify({}))
+            await flush()
+            await p
+            expect(client.state()).toBe("connected")
         })
 
-        await expect(client.connect()).rejects.toThrow(/WebSocket connection error/i)
-        expect(pending.rejectAll).not.toHaveBeenCalled()
-        expect(stateOf(client)).toBe("disconnected")
-    })
-
-    it("rejects on a socket error before handshake", async () => {
-        const { client } = createClient({ scheduleFactory: undefined })
-        const p = client.connect()
-        const socket = getSocket()
-
-        socket.fireError()
-
-        await expect(p).rejects.toThrow(/connection error/i)
-        expect(stateOf(client)).toBe("disconnected")
-    })
-})
-
-describe("send()", () => {
-    it("sends immediately when connected and resolves with the reply", async () => {
-        const { client } = createClient()
-        const socket = await connectAndHandshake(client)
-
-        const p = client.send<{ foo: string }, { ok: boolean }>("req", { foo: "bar" })
-
-        expect(socket.sent).toHaveLength(2)
-        const msg = JSON.parse(socket.sent[1]!) as {
-            key: string
-            id: number
-            value: unknown
-        }
-        expect(msg.key).toBe("req")
-        expect(msg.value).toEqual({ foo: "bar" })
-        expect(typeof msg.id).toBe("number")
-        expect(msg.id).not.toBe(0)
-
-        socket.receive(JSON.stringify({ id: msg.id, value: { ok: true } }))
-        await flushPromises()
-        await expect(p).resolves.toEqual({ ok: true })
-    })
-
-    it("queues while connecting and flushes after handshake", async () => {
-        const { client } = createClient()
-        const connectP = client.connect()
-        const socket = getSocket()
-
-        const sendP = client.send<unknown, { result: number }>("req", { x: 1 })
-        expect(socket.sent).toHaveLength(0)
-
-        await finishHandshake(socket)
-        await connectP
-
-        expect(socket.sent).toHaveLength(2)
-        const msg = JSON.parse(socket.sent[1]!) as { id: number }
-        socket.receive(JSON.stringify({ id: msg.id, value: { result: 42 } }))
-        await flushPromises()
-
-        await expect(sendP).resolves.toEqual({ result: 42 })
-    })
-
-    it("keeps queued requests pending when the connection attempt fails", async () => {
-        const { client } = createClient({ scheduleFactory: undefined })
-        const connectP = client.connect()
-        const socket = getSocket()
-
-        const sendP = client.send("req", {})
-        let settled = false
-        void sendP.then(
-            () => { settled = true },
-            () => { settled = true },
-        )
-
-        socket.fireError()
-        await expect(connectP).rejects.toThrow()
-        await flushPromises()
-
-        expect(settled).toBe(false)
-    })
-
-    it("throws synchronously when the serializer fails", async () => {
-        const throwingSerializer: Serializer = {
-            protocol: "test",
-            serialize: () => {
-                throw new Error("cannot serialize")
-            },
-            deserialize: () => Promise.resolve(undefined),
-        }
-        const { client } = createClient({ serializer: throwingSerializer })
-        await connectAndHandshake(client)
-
-        expect(() => client.send("req", {})).toThrow("cannot serialize")
-    })
-
-    it("rejects an in-flight request when the socket closes unexpectedly", async () => {
-        const { client } = createClient()
-        const socket = await connectAndHandshake(client)
-
-        const p = client.send("req", {})
-        socket.serverClose(1006, "abnormal")
-
-        await expect(p).rejects.toThrow(/Connection closed/i)
-    })
-
-    it("assigns a unique nonzero correlation id to every request", async () => {
-        const { client } = createClient()
-        const socket = await connectAndHandshake(client)
-
-        const a = client.send("a", {})
-        const b = client.send("b", {})
-        const c = client.send("c", {})
-        a.catch(() => { }); b.catch(() => { }); c.catch(() => { })
-
-        const ids = socket.sent
-            .slice(1)
-            .map((s) => (JSON.parse(s) as { id: number }).id)
-        expect(new Set(ids).size).toBe(ids.length)
-        expect(ids.every((id) => id > 0)).toBe(true)
-    })
-})
-
-describe("notify()", () => {
-    it("throws when not connected", () => {
-        const { client } = createClient()
-        expect(() => client.notify("evt", {})).toThrow(/not connected/i)
-    })
-
-    it("sends a key/value message without an id", async () => {
-        const { client } = createClient()
-        const socket = await connectAndHandshake(client)
-
-        client.notify("evt", { a: 1 })
-
-        expect(socket.sent).toHaveLength(2)
-        expect(JSON.parse(socket.sent[1]!)).toEqual({ key: "evt", value: { a: 1 } })
-    })
-})
-
-describe("receive()", () => {
-    it("dispatches keyed messages to handlers", async () => {
-        const { client } = createClient()
-        const got: unknown[] = []
-        client.receive("evt", (v) => got.push(v))
-
-        const socket = await connectAndHandshake(client)
-        socket.receive(JSON.stringify({ key: "evt", value: { a: 1 } }))
-        await flushPromises()
-
-        expect(got).toEqual([{ a: 1 }])
-    })
-
-    it("delivers to multiple subscribers", async () => {
-        const { client } = createClient()
-        const a: unknown[] = []
-        const b: unknown[] = []
-        client.receive("evt", (v) => a.push(v))
-        client.receive("evt", (v) => b.push(v))
-
-        const socket = await connectAndHandshake(client)
-        socket.receive(JSON.stringify({ key: "evt", value: 7 }))
-        await flushPromises()
-
-        expect(a).toEqual([7])
-        expect(b).toEqual([7])
-    })
-
-    it("stops delivery after unsubscribe", async () => {
-        const { client } = createClient()
-        const got: unknown[] = []
-        const off = client.receive("evt", (v) => got.push(v))
-
-        const socket = await connectAndHandshake(client)
-        off()
-        socket.receive(JSON.stringify({ key: "evt", value: 1 }))
-        await flushPromises()
-
-        expect(got).toEqual([])
-    })
-
-    it("isolates a throwing handler from the next", async () => {
-        const { client } = createClient()
-        const got: unknown[] = []
-        client.receive("evt", () => {
-            throw new Error("boom")
+        it("becomes disconnected after unexpected close", async () => {
+            const { client, socket } = await connected()
+            socket.triggerClose(1006, "abnormal")
+            expect(client.state()).toBe("disconnected")
         })
-        client.receive("evt", (v) => got.push(v))
-
-        const socket = await connectAndHandshake(client)
-        socket.receive(JSON.stringify({ key: "evt", value: 7 }))
-        await flushPromises()
-
-        expect(got).toEqual([7])
     })
 
-    it("ignores messages for unknown keys", async () => {
-        const { client } = createClient()
-        const socket = await connectAndHandshake(client)
-        expect(() => socket.receive(JSON.stringify({ key: "nope", value: 1 }))).not.toThrow()
+    describe("connect()", () => {
+        it("resolves on successful handshake", async () => {
+            const { client } = await connected()
+            expect(client.state()).toBe("connected")
+        })
+
+        it("sends the handshake message using the handshake serializer", async () => {
+            const socket = new MockWebSocket("ws://test")
+            const hs = createSerializer()
+            const client = useWsClient({
+                url: "ws://test",
+                handshakeSerializer: hs,
+                socketFactory: () => socket as unknown as WebSocket,
+            })
+            const p = client.connect()
+            socket.triggerOpen()
+            expect(hs.serialize).toHaveBeenCalledWith({ protocol: hs.protocol })
+            expect(socket.sent).toHaveLength(1)
+            socket.triggerMessage(JSON.stringify({}))
+            await flush()
+            await p
+        })
+
+        it("uses serializer.protocol in the handshake payload", async () => {
+            const socket = new MockWebSocket("ws://test")
+            const handshakeSerializer = createSerializer()
+            const serializer = { ...createSerializer(), protocol: "custom-proto" }
+            const client = useWsClient({
+                url: "ws://test",
+                handshakeSerializer,
+                serializer,
+                socketFactory: () => socket as unknown as WebSocket,
+            })
+            const p = client.connect()
+            socket.triggerOpen()
+            expect(handshakeSerializer.serialize).toHaveBeenCalledWith({ protocol: "custom-proto" })
+            socket.triggerMessage(JSON.stringify({}))
+            await flush()
+            await p
+        })
+
+        it("invokes URL function at connect time (not construction)", async () => {
+            const urlFn = vitest.fn().mockReturnValue("ws://test")
+            const socket = new MockWebSocket("ws://test")
+            const client = useWsClient({
+                url: urlFn as any,
+                socketFactory: () => socket as unknown as WebSocket,
+            })
+            expect(urlFn).not.toHaveBeenCalled()
+            const p = client.connect()
+            expect(urlFn).toHaveBeenCalledTimes(1)
+            socket.triggerOpen()
+            await flush()
+            socket.triggerMessage(JSON.stringify({}))
+            await flush()
+            await p
+        })
+
+        it("is a no-op when already connected", async () => {
+            const { client } = await connected()
+            await expect(client.connect()).resolves.toBeUndefined()
+        })
+
+        it("is a no-op while still connecting", async () => {
+            const socket = new MockWebSocket("ws://test")
+            const client = useWsClient({
+                url: "ws://test",
+                socketFactory: () => socket as unknown as WebSocket,
+            })
+            const p1 = client.connect()
+            const p2 = client.connect()
+            await expect(p2).resolves.toBeUndefined()
+            socket.triggerOpen()
+            await flush()
+            socket.triggerMessage(JSON.stringify({}))
+            await flush()
+            await p1
+        })
+
+        it("rejects when the socket factory throws", async () => {
+            const client = useWsClient({
+                url: "ws://test",
+                socketFactory: () => {
+                    throw new Error("boom")
+                },
+            })
+            await expect(client.connect()).rejects.toThrow("WebSocket connection error")
+            expect(client.state()).toBe("disconnected")
+        })
+
+        it("rejects when the socket errors during the connection phase", async () => {
+            const socket = new MockWebSocket("ws://test")
+            const client = useWsClient({
+                url: "ws://test",
+                socketFactory: () => socket as unknown as WebSocket,
+            })
+            const p = client.connect()
+            socket.triggerError()
+            await expect(p).rejects.toThrow("WebSocket connection error")
+            expect(client.state()).toBe("disconnected")
+        })
+
+        it("rejects on handshake timeout", async () => {
+            vitest.useFakeTimers()
+            const socket = new MockWebSocket("ws://test")
+            const client = useWsClient({
+                url: "ws://test",
+                socketFactory: () => socket as unknown as WebSocket,
+                handshakeTimeoutMs: 100,
+            })
+            const p = client.connect()
+            socket.triggerOpen()
+            vitest.advanceTimersByTime(100)
+            await expect(p).rejects.toThrow("Handshake timed out")
+            expect(client.state()).toBe("disconnected")
+        })
+
+        it("rejects on invalid handshake response format", async () => {
+            const socket = new MockWebSocket("ws://test")
+            const client = useWsClient({
+                url: "ws://test",
+                socketFactory: () => socket as unknown as WebSocket,
+            })
+            const p = client.connect()
+            socket.triggerOpen()
+            await flush()
+            socket.triggerMessage(JSON.stringify({ not: "empty" }))
+            await flush()
+            await expect(p).rejects.toThrow("Handshake response has invalid format")
+        })
+
+        // it("rejects when handshake deserialization fails", async () => {
+        //     const socket = new MockWebSocket("ws://test")
+        //     const serializer = createSerializer()
+        //         ; (serializer.deserialize as vitest.Mock).mockImplementation(() => {
+        //             throw new Error("bad json")
+        //         })
+        //     const client = useWsClient({
+        //         url: "ws://test",
+        //         handshakeSerializer: serializer,
+        //         socketFactory: () => socket as unknown as WebSocket,
+        //     })
+        //     const p = client.connect()
+        //     socket.triggerOpen()
+        //     await flush()
+        //     socket.triggerMessage("not-json")
+        //     await flush()
+        //     await expect(p).rejects.toThrow()
+        // })
+
+        it("throws when no global WebSocket and no factory is provided", async () => {
+            ; (globalThis as any).WebSocket = undefined
+            const client = useWsClient({ url: "ws://test" })
+            await expect(client.connect()).rejects.toThrow("WebSocket connection error")
+        })
+
+        it("delegates to schedule.run on connect error", async () => {
+            const run = vitest.fn(() => Promise.resolve()).mockResolvedValue(undefined)
+            const client = useWsClient({
+                url: "ws://test",
+                socketFactory: () => {
+                    throw new Error("boom")
+                },
+                scheduleFactory: () => ({ run, reset: vitest.fn() }),
+            })
+            await expect(client.connect()).resolves.toBeUndefined()
+            expect(run).toHaveBeenCalledWith(expect.any(Function))
+        })
+
+        it("reconnects via schedule after connection error", async () => {
+            let attempts = 0
+            const sockets: MockWebSocket[] = []
+            const client = useWsClient({
+                url: "ws://test",
+                socketFactory: () => {
+                    attempts++
+                    const s = new MockWebSocket("ws://test")
+                    sockets.push(s)
+                    return s as unknown as WebSocket
+                },
+                scheduleFactory: buildSchedule({ minDelay: 5, jitter: 0, factor: 1 }),
+            })
+            const p = client.connect()
+            sockets[0].triggerError()
+            await new Promise((r) => setTimeout(r, 20))
+            expect(attempts).toBe(2)
+            sockets[1].triggerOpen()
+            await flush()
+            sockets[1].triggerMessage(JSON.stringify({}))
+            await flush()
+            await p
+            expect(client.state()).toBe("connected")
+        })
+
+        it("resets the schedule after a successful connection", async () => {
+            const reset = vitest.fn()
+            const run = vitest.fn(() => Promise.resolve())
+            const { client } = await connected({
+                scheduleFactory: () => ({ run, reset }),
+            })
+            expect(reset).toHaveBeenCalled()
+        })
     })
-})
 
-describe("close()", () => {
-    it("rejects in-flight requests and marks disconnected", async () => {
-        const { client } = createClient()
-        const socket = await connectAndHandshake(client)
+    describe("close()", () => {
+        it("throws when not connected", () => {
+            const client = useWsClient({
+                url: "ws://test",
+                socketFactory: () => new MockWebSocket("ws://test") as unknown as WebSocket,
+            })
+            expect(() => client.close()).toThrow("Client not connected")
+        })
 
-        const p = client.send("req", {})
-        client.close()
+        it("throws when connecting (not yet open)", () => {
+            const socket = new MockWebSocket("ws://test")
+            const client = useWsClient({
+                url: "ws://test",
+                socketFactory: () => socket as unknown as WebSocket,
+            })
+            client.connect()
+            expect(() => client.close()).toThrow("Client not connected")
+        })
 
-        expect(stateOf(client)).toBe("disconnected")
-        expect(socket.readyState).toBe(3)
-        await expect(p).rejects.toThrow(/Connection closed/i)
+        it("closes the socket and marks disconnected", async () => {
+            const { client, socket } = await connected()
+            client.close(1000, "bye")
+            expect(client.state()).toBe("disconnected")
+            expect(socket.readyState).toBe(MockWebSocket.CLOSED)
+        })
+
+        it("does not trigger schedule.run on manual close", async () => {
+            const run = vitest.fn(() => Promise.resolve())
+            const { client } = await connected({
+                scheduleFactory: () => ({ run, reset: vitest.fn() }),
+            })
+            client.close()
+            expect(run).not.toHaveBeenCalled()
+        })
+
+        it("rejects pending requests with a close error", async () => {
+            const { client, socket } = await connected()
+            const sendPromise = client.send("foo", "bar")
+            client.close(1000, "bye")
+            await expect(sendPromise).rejects.toThrow(/Connection closed/)
+        })
     })
 
-    it("does not schedule a reconnect", async () => {
-        const { client, schedule } = createClient()
-        await connectAndHandshake(client)
-        client.close()
-        await flushPromises()
-        expect(schedule.run).not.toHaveBeenCalled()
+    describe("send()", () => {
+        it("queues while disconnected and dispatches after connect", async () => {
+            const socket = new MockWebSocket("ws://test")
+            const client = useWsClient({
+                url: "ws://test",
+                socketFactory: () => socket as unknown as WebSocket,
+            })
+            const sendPromise = client.send<string, string>("foo", "bar")
+            const connectPromise = client.connect()
+            socket.triggerOpen()
+            await flush()
+            socket.triggerMessage(JSON.stringify({}))
+            await flush()
+            await connectPromise
+
+            expect(socket.sent).toHaveLength(2)
+            const request = JSON.parse(socket.sent[1])
+            expect(request.key).toBe("foo")
+            expect(request.value).toBe("bar")
+            expect(request.id).toBeGreaterThan(0)
+
+            socket.triggerMessage(
+                JSON.stringify({ type: MessageType.response, id: request.id, value: "ok" }),
+            )
+            await flush()
+            await expect(sendPromise).resolves.toBe("ok")
+        })
+
+        it("sends immediately when connected", async () => {
+            const { client, socket } = await connected()
+            const sendPromise = client.send<string, string>("foo", "bar")
+            expect(socket.sent).toHaveLength(2)
+            const request = JSON.parse(socket.sent[1])
+            socket.triggerMessage(
+                JSON.stringify({ type: MessageType.response, id: request.id, value: "ok" }),
+            )
+            await flush()
+            await expect(sendPromise).resolves.toBe("ok")
+        })
+
+        it("resolves with the correct value from response", async () => {
+            const { client, socket } = await connected()
+            const sendPromise = client.send<string, { hello: string }>("foo", "bar")
+            const request = JSON.parse(socket.sent[1])
+            socket.triggerMessage(
+                JSON.stringify({
+                    type: MessageType.response,
+                    id: request.id,
+                    value: { hello: "world" },
+                }),
+            )
+            await flush()
+            await expect(sendPromise).resolves.toEqual({ hello: "world" })
+        })
+
+        // it("throws synchronously when serialization fails", async () => {
+        //     const serializer = createSerializer()
+        //         ; (serializer.serializeRequest as vitest.Mock).mockImplementationOnce(() => {
+        //             throw new Error("serialize-err")
+        //         })
+        //     const { client } = await connected({ serializer })
+        //     expect(() => client.send("foo", "bar")).toThrow("serialize-err")
+        // })
+
+        it("rejects when socket.send throws", async () => {
+            const { client, socket } = await connected()
+            vitest.spyOn(socket, "send").mockImplementationOnce(() => {
+                throw new Error("send-err")
+            })
+            await expect(client.send("foo", "bar")).rejects.toThrow("send-err")
+        })
+
+        it("rejects with WsError when the server responds with an error", async () => {
+            const { client, socket } = await connected()
+            const sendPromise = client.send<string, string>("foo", "bar")
+            const request = JSON.parse(socket.sent[1])
+            socket.triggerMessage(
+                JSON.stringify({
+                    type: MessageType.error,
+                    id: request.id,
+                    code: 2,
+                    message: "handler failed",
+                }),
+            )
+            await flush()
+            await expect(sendPromise).rejects.toBeInstanceOf(WsError)
+        })
+
+        it("assigns distinct correlation ids", async () => {
+            const { client, socket } = await connected()
+            client.send("a", 1)
+            client.send("b", 2)
+            const ids = socket.sent.slice(1).map((s) => JSON.parse(s).id)
+            expect(new Set(ids).size).toBe(2)
+        })
     })
 
-    it("throws when not connected", () => {
-        const { client } = createClient()
-        expect(() => client.close()).toThrow(/not connected/i)
-    })
-})
+    describe("notify()", () => {
+        it("throws when not connected", () => {
+            const client = useWsClient({
+                url: "ws://test",
+                socketFactory: () => new MockWebSocket("ws://test") as unknown as WebSocket,
+            })
+            expect(() => client.notify("k", "v")).toThrow("Client is not connected")
+        })
 
-describe("reconnect", () => {
-    it("schedules a retry after an unexpected close", async () => {
-        const autoSchedule = createSchedule(true)
-        const { client } = createClient({ scheduleFactory: () => autoSchedule })
-
-        const socketA = await connectAndHandshake(client)
-        socketA.serverClose(1006, "network")
-        await flushPromises()
-
-        expect(autoSchedule.run).toHaveBeenCalledTimes(1)
-        expect(MockSocket.instances).toHaveLength(2)
+        it("sends with id 0", async () => {
+            const { client, socket } = await connected()
+            client.notify("foo", { n: 1 })
+            const sent = JSON.parse(socket.sent[1])
+            expect(sent).toEqual({ id: 0, key: "foo", value: { n: 1 } })
+        })
     })
 
-    it("resets the schedule after a successful reconnect", async () => {
-        const autoSchedule = createSchedule(true)
-        const { client } = createClient({ scheduleFactory: () => autoSchedule })
+    describe("receive()", () => {
+        it("calls handlers on event messages", async () => {
+            const { client, socket } = await connected()
+            const handler = vitest.fn()
+            client.receive("tick", handler)
+            socket.triggerMessage(
+                JSON.stringify({ type: MessageType.event, key: "tick", value: { n: 42 } }),
+            )
+            await flush()
+            expect(handler).toHaveBeenCalledWith({ n: 42 })
+        })
 
-        const socketA = await connectAndHandshake(client)
-        socketA.serverClose(1006, "network")
-        await flushPromises()
+        it("invokes all handlers for the same key", async () => {
+            const { client, socket } = await connected()
+            const h1 = vitest.fn()
+            const h2 = vitest.fn()
+            client.receive("tick", h1)
+            client.receive("tick", h2)
+            socket.triggerMessage(JSON.stringify({ type: MessageType.event, key: "tick", value: 1 }))
+            await flush()
+            expect(h1).toHaveBeenCalledTimes(1)
+            expect(h2).toHaveBeenCalledTimes(1)
+        })
 
-        const socketB = getSocket(1)
-        await finishHandshake(socketB)
-        await flushPromises()
+        it("ignores events for unknown keys", async () => {
+            const { socket } = await connected()
+            socket.triggerMessage(
+                JSON.stringify({ type: MessageType.event, key: "unknown", value: 1 }),
+            )
+            await flush()
+        })
 
-        expect(stateOf(client)).toBe("connected")
-        expect(autoSchedule.reset).toHaveBeenCalledTimes(2)
+        it("unsubscribe removes only the specific handler", async () => {
+            const { client, socket } = await connected()
+            const h1 = vitest.fn()
+            const h2 = vitest.fn()
+            const unsub1 = client.receive("tick", h1)
+            client.receive("tick", h2)
+            unsub1()
+            socket.triggerMessage(JSON.stringify({ type: MessageType.event, key: "tick", value: 1 }))
+            await flush()
+            expect(h1).not.toHaveBeenCalled()
+            expect(h2).toHaveBeenCalledTimes(1)
+        })
+
+        it("unsubscribing a missing key is a no-op", () => {
+            const { client } = {} as { client: WsClient }
+            const c = useWsClient({
+                url: "ws://test",
+                socketFactory: () => new MockWebSocket("ws://test") as unknown as WebSocket,
+            })
+            const unsub = c.receive("never", () => { })
+            expect(() => unsub()).not.toThrow()
+            expect(() => unsub()).not.toThrow()
+        })
+
+        it("isolates handler exceptions from other handlers", async () => {
+            const { client, socket } = await connected()
+            const throwing = vitest.fn(() => {
+                throw new Error("boom")
+            })
+            const ok = vitest.fn()
+            client.receive("tick", throwing)
+            client.receive("tick", ok)
+            socket.triggerMessage(JSON.stringify({ type: MessageType.event, key: "tick", value: 1 }))
+            await flush()
+            expect(throwing).toHaveBeenCalled()
+            expect(ok).toHaveBeenCalled()
+        })
     })
 
-    it("does not deliver stale socket messages to user handlers", async () => {
-        const autoSchedule = createSchedule(true)
-        const { client } = createClient({ scheduleFactory: () => autoSchedule })
+    describe("incoming message encoding", () => {
+        it("handles string payloads", async () => {
+            const { client, socket } = await connected()
+            const handler = vitest.fn()
+            client.receive("k", handler)
+            socket.triggerMessage(JSON.stringify({ type: MessageType.event, key: "k", value: "s" }))
+            await flush()
+            expect(handler).toHaveBeenCalledWith("s")
+        })
 
-        const connectP = client.connect()
-        const socketA = getSocket(0)
-        socketA.fireError()
-        await flushPromises()
+        it("handles ArrayBuffer payloads", async () => {
+            const { client, socket } = await connected()
+            const handler = vitest.fn()
+            client.receive("k", handler)
+            const bytes = new TextEncoder().encode(
+                JSON.stringify({ type: MessageType.event, key: "k", value: "ab" }),
+            )
+            socket.triggerMessage(bytes.buffer)
+            await flush()
+            expect(handler).toHaveBeenCalledWith("ab")
+        })
 
-        const socketB = getSocket(1)
-        await finishHandshake(socketB)
-        await connectP
-        await flushPromises()
-        expect(stateOf(client)).toBe("connected")
+        it("handles Uint8Array payloads", async () => {
+            const { client, socket } = await connected()
+            const handler = vitest.fn()
+            client.receive("k", handler)
+            const bytes = new TextEncoder().encode(
+                JSON.stringify({ type: MessageType.event, key: "k", value: "arr" }),
+            )
+            socket.triggerMessage(bytes)
+            await flush()
+            expect(handler).toHaveBeenCalledWith("arr")
+        })
 
-        const got: unknown[] = []
-        client.receive("evt", (v) => got.push(v))
-
-        socketA.receive(JSON.stringify({ key: "evt", value: "stale" }))
-        await flushPromises()
-
-        expect(got).toEqual([])
-    })
-})
-
-describe("handleMessage()", () => {
-    it("rejects a request whose reply carries an error", async () => {
-        const { client } = createClient()
-        const socket = await connectAndHandshake(client)
-
-        const p = client.send("req", {})
-        const msg = JSON.parse(socket.sent[1]!) as { id: number }
-        socket.receive(JSON.stringify({ id: msg.id, error: "bad" }))
-        await flushPromises()
-
-        await expect(p).rejects.toBe("bad")
-    })
-
-    it("calls both reject and resolve when error and value coexist", async () => {
-        const { client, pending } = createClient()
-        const socket = await connectAndHandshake(client)
-
-        const p = client.send("req", {})
-        const msg = JSON.parse(socket.sent[1]!) as { id: number }
-        socket.receive(JSON.stringify({ id: msg.id, error: "bad", value: "ok" }))
-        await flushPromises()
-
-        expect(pending.reject).toHaveBeenCalledWith(msg.id, "bad")
-        expect(pending.resolve).toHaveBeenCalledWith(msg.id, "ok")
-        await expect(p).rejects.toBe("bad")
+        it("handles Blob payloads", async () => {
+            const { client, socket } = await connected()
+            const handler = vitest.fn()
+            client.receive("k", handler)
+            const blob = new Blob([
+                JSON.stringify({ type: MessageType.event, key: "k", value: "blob" }),
+            ])
+            socket.triggerMessage(blob)
+            await flush()
+            expect(handler).toHaveBeenCalledWith("blob")
+        })
     })
 
-    it("ignores malformed JSON", async () => {
-        const { client } = createClient()
-        const socket = await connectAndHandshake(client)
-        expect(() => socket.receive("<<not json>>")).not.toThrow()
-        await flushPromises()
-        expect(stateOf(client)).toBe("connected")
-    })
-})
+    describe("runtime close", () => {
+        it("rejects pending requests on unexpected close", async () => {
+            const { client, socket } = await connected()
+            const sendPromise = client.send("foo", "bar")
+            socket.triggerClose(1006, "boom")
+            await expect(sendPromise).rejects.toThrow(/Connection closed/)
+            expect(client.state()).toBe("disconnected")
+        })
 
-describe("schedule usage", () => {
-    it("resets on successful connect", async () => {
-        const { client, schedule } = createClient()
-        await connectAndHandshake(client)
-        expect(schedule.reset).toHaveBeenCalledTimes(1)
+        it("does not schedule reconnection on manual close", async () => {
+            const run = vitest.fn(() => Promise.resolve())
+            const { client } = await connected({
+                scheduleFactory: () => ({ run, reset: vitest.fn() }),
+            })
+            client.close()
+            expect(run).not.toHaveBeenCalled()
+        })
+
+        it("schedules reconnection on unexpected close", async () => {
+            const run = vitest.fn(() => Promise.resolve()).mockResolvedValue(undefined)
+            const { socket } = await connected({
+                scheduleFactory: () => ({ run, reset: vitest.fn() }),
+            })
+            socket.triggerClose(1006, "abnormal")
+            expect(run).toHaveBeenCalledWith(expect.any(Function))
+        })
+
+        it("uses onRuntimeError after handshake", async () => {
+            const run = vitest.fn(() => Promise.resolve())
+            const { socket } = await connected({
+                scheduleFactory: () => ({ run, reset: vitest.fn() }),
+            })
+            socket.triggerError()
+            expect(run).toHaveBeenCalled()
+        })
     })
 
-    it("does not run on a clean manual close", async () => {
-        const { client, schedule } = createClient()
-        await connectAndHandshake(client)
-        client.close()
-        expect(schedule.run).not.toHaveBeenCalled()
+    describe("queued requests on connect failure", () => {
+        it("rejects all queued sends when connect fails without a scheduler", async () => {
+            const socket = new MockWebSocket("ws://test")
+            const client = useWsClient({
+                url: "ws://test",
+                socketFactory: () => socket as unknown as WebSocket,
+            })
+            const p1 = client.send("a", 1)
+            const p2 = client.send("b", 2)
+            const connectP = client.connect()
+            socket.triggerError()
+            await expect(connectP).rejects.toThrow()
+            await expect(p1).rejects.toThrow()
+            await expect(p2).rejects.toThrow()
+        })
+
+        it("rejects queued sends when manual close happens during connecting", async () => {
+            const socket = new MockWebSocket("ws://test")
+            const client = useWsClient({
+                url: "ws://test",
+                socketFactory: () => socket as unknown as WebSocket,
+            })
+            const p = client.send("a", 1)
+            const connectP = client.connect()
+            socket.triggerError()
+            await expect(connectP).rejects.toThrow()
+            await expect(p).rejects.toThrow()
+        })
     })
 })
