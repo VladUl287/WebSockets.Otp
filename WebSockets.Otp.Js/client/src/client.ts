@@ -117,6 +117,8 @@ export const useWsClient = (options: WsClientOptions): WsClient => {
                         resolveQueue(socket)
                     })
                     .catch((error: unknown) => {
+                        manuallyClosed = true
+                        detach(socket)
                         state = "disconnected"
                         reject(error)
                         try { socket.close(4000, "handshake fail") } catch { }
