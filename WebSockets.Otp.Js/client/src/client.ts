@@ -1,5 +1,5 @@
 import { jsonSerializer } from "@fefruess/websockets.otp.json"
-import { MessageType, type Encoded, type MessageSerializer, type ServerMessage } from "@fefruess/websockets.otp.serializer.core"
+import { MessageType, WsError, type Encoded, type MessageSerializer, type ServerMessage } from "@fefruess/websockets.otp.serializer.core"
 import { usePendingRegistry, type PendingRegistry } from "./pending.js"
 import { buildSchedule } from "./schedule.js"
 import { type ConnectionState } from "./types.js"
@@ -341,7 +341,7 @@ export const useWsClient = (options: WsClientOptions): WsClient => {
                 }
                 break
             case MessageType.error:
-                pending.reject(parsed.id, parsed.message)
+                pending.reject(parsed.id, new WsError(parsed.code, parsed.message, { id: parsed.id }))
                 break
         }
     }
