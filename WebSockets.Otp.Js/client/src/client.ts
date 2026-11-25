@@ -15,7 +15,7 @@ type Handler<T> = (value: T) => void
 
 export type WsClientOptions = {
     readonly url: string | (() => string),
-    readonly defaultSerializer?: MessageSerializer,
+    readonly handshakeSerializer?: MessageSerializer,
     readonly serializer?: MessageSerializer,
     readonly socketFactory?: typeof defaultFactory,
     readonly scheduleFactory?: ReturnType<typeof buildSchedule>,
@@ -35,7 +35,7 @@ export type WsClient = {
 export const useWsClient = (options: WsClientOptions): WsClient => {
     const {
         url,
-        defaultSerializer = jsonSerializer(),
+        handshakeSerializer: defaultSerializer = jsonSerializer(),
         serializer = defaultSerializer,
         socketFactory = defaultFactory,
         scheduleFactory,
