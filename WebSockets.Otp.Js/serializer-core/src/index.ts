@@ -2,15 +2,34 @@ export const MessageType = { response: 1, error: 2, event: 3 } as const
 export type MessageType = typeof MessageType[keyof typeof MessageType]
 
 export const WsErrorCode =
-{
-    invalidPayload: 0,
-    unknownRoute: 1,
-    handlerFailed: 2,
-    unauthorized: 3,
-    rateLimited: 4,
-    internal: 5
-} as const
+    {
+        invalidPayload: 0,
+        unknownRoute: 1,
+        handlerFailed: 2,
+        unauthorized: 3,
+        rateLimited: 4,
+        internal: 5
+    } as const
 export type WsErrorCode = typeof WsErrorCode[keyof typeof WsErrorCode]
+
+export class WsError extends Error {
+    public readonly key?: string
+    public readonly id?: number
+
+    constructor(
+        public readonly code: WsErrorCode,
+        message: string,
+        opts?: { key?: string, id?: number }
+    ) {
+        super(message)
+        this.name = "WsError"
+        this.key = opts?.key
+        this.id = opts?.id
+        Object.setPrototypeOf(this, WsError.prototype)
+    }
+}
+
+export const isWsError = (e: unknown): e is WsError => e instanceof WsError
 
 export type ServerMessage =
     | { type: typeof MessageType.response; id: number; value: unknown }
