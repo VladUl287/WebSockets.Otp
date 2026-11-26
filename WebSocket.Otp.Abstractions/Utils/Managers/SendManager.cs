@@ -29,11 +29,8 @@ public sealed class SendManager(IWsConnectionManager manager)
         return this;
     }
 
-    public async ValueTask SendAsync<TData>(string key, TData data, CancellationToken token = default)
-        where TData : notnull
+    public async ValueTask SendAsync(WsMessage envelope, CancellationToken token = default)
     {
-        var envelope = new EventMessage(key, data);
-
         try
         {
             if (_targetAll)
@@ -54,5 +51,12 @@ public sealed class SendManager(IWsConnectionManager manager)
             _groups.Clear();
             _targetAll = false;
         }
+    }
+
+    public ValueTask SendAsync<TData>(string key, TData data, CancellationToken token = default)
+        where TData : notnull
+    {
+        var envelope = new EventMessage(key, data);
+        return SendAsync(envelope, token);
     }
 }
