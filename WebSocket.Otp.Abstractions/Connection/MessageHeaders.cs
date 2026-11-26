@@ -26,6 +26,7 @@ public enum WsErrorCode
 {
     InvalidPayload,
     UnknownRoute,
+    HandlerFailed,
     Unauthorized,
     RateLimited,
     Internal
