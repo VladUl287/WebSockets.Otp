@@ -11,8 +11,7 @@ public sealed class JsonMessageSerializer(JsonSerializerOptions options) : IMess
     public string Protocol => "json";
     public WebSocketMessageType Type => WebSocketMessageType.Text;
 
-    public T? Deserialize<T>(ReadOnlyMemory<byte> data) => Deserialize<T>(data, options);
-    public T? Deserialize<T>(ReadOnlyMemory<byte> data, JsonSerializerOptions options) => JsonSerializer.Deserialize<T>(data.Span, options);
+    public T? Deserialize<T>(ReadOnlyMemory<byte> data) => JsonSerializer.Deserialize<T>(data.Span, options);
 
     private static readonly JsonWriterOptions WriterOptions = new() { SkipValidation = true };
     public void SerializeMessage(WsMessage data, IBufferWriter<byte> buffer)
