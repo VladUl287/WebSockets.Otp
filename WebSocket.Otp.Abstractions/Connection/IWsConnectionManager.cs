@@ -1,4 +1,6 @@
-﻿namespace WebSockets.Otp.Abstractions.Connection;
+﻿using WebSockets.Otp.Abstractions.Utils;
+
+namespace WebSockets.Otp.Abstractions.Connection;
 
 public interface IWsConnectionManager
 {
@@ -8,10 +10,5 @@ public interface IWsConnectionManager
     ValueTask<bool> AddToGroup(string group, string connectionId, CancellationToken token);
     ValueTask<bool> RemoveFromGroup(string group, string connectionId, CancellationToken token);
 
-    ValueTask Send(WsMessage envelope, CancellationToken token);
-    ValueTask Send(string connectionId, WsMessage envelope, CancellationToken token);
-    ValueTask Send(IEnumerable<string> connections, WsMessage envelope, CancellationToken token);
-
-    ValueTask SendToGroup(string group, WsMessage envelope, CancellationToken token);
-    ValueTask SendToGroup(IEnumerable<string> groups, WsMessage envelope, CancellationToken token);
+    ValueTask Send(WsTarget target, WsMessage envelope, CancellationToken ct = default);
 }

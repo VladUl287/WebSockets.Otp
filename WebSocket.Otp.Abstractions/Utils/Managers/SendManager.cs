@@ -4,22 +4,73 @@ namespace WebSockets.Otp.Abstractions.Utils.Managers;
 
 public sealed class SendManager(IWsConnectionManager manager)
 {
-    public readonly IWsConnectionManager _manager = manager;
-    public readonly HashSet<string> _connectionIds = [];
-    public readonly HashSet<string> _groups = [];
-    public bool _targetAll = false;
+    private readonly IWsConnectionManager _manager = manager;
+    private List<string>? _connectionsIds;
+    private List<string>? _groups;
+    private List<string>? _exclude;
+    private bool _targetAll = false;
+
+    private List<string> ConnectionsIds => (_connectionsIds ??= []);
+    private List<string> Groups => (_groups ??= []);
+    private List<string> Exclude => (_exclude ??= []);
 
     public SendManager Client(string connectionId)
     {
         if (_targetAll) return this;
-        _connectionIds.Add(connectionId);
+        ConnectionsIds.Add(connectionId);
+        return this;
+    }
+
+    public SendManager Clients(params string[] connectionsIds)
+    {
+        if (_targetAll) return this;
+        ConnectionsIds.AddRange(connectionsIds);
+        return this;
+    }
+
+    public SendManager Client(IEnumerable<string> connectionsIds)
+    {
+        if (_targetAll) return this;
+        ConnectionsIds.AddRange(connectionsIds);
+        return this;
+    }
+
+    public SendManager Except(string connectionId)
+    {
+        Exclude.Add(connectionId);
+        return this;
+    }
+
+    public SendManager Except(params string[] connectionsIds)
+    {
+        Exclude.AddRange(connectionsIds);
+        return this;
+    }
+
+    public SendManager Except(IEnumerable<string> connectionsIds)
+    {
+        Exclude.AddRange(connectionsIds);
         return this;
     }
 
     public SendManager Group(string groupName)
     {
         if (_targetAll) return this;
-        _groups.Add(groupName);
+        Groups.Add(groupName);
+        return this;
+    }
+
+    public SendManager Group(params string[] groups)
+    {
+        if (_targetAll) return this;
+        Groups.AddRange(groups);
+        return this;
+    }
+
+    public SendManager Group(IEnumerable<string> groups)
+    {
+        if (_targetAll) return this;
+        Groups.AddRange(groups);
         return this;
     }
 
@@ -29,34 +80,32 @@ public sealed class SendManager(IWsConnectionManager manager)
         return this;
     }
 
-    public async ValueTask SendAsync(WsMessage envelope, CancellationToken token = default)
+    public async ValueTask SendAsync<TData>(string key, TData data, CancellationToken token = default)
+        where TData : notnull
     {
         try
         {
-            if (_targetAll)
-            {
-                await _manager.Send(envelope, token);
+            if (!_targetAll && _connectionsIds is not { Count: > 0 } && _groups is not { Count: > 0 })
                 return;
-            }
 
-            if (_connectionIds.Count > 0)
-                await _manager.Send(_connectionIds, envelope, token);
+            var target = new WsTarget();
 
-            if (_groups.Count > 0)
-                await _manager.SendToGroup(_groups, envelope, token);
+            if (_exclude is not null)
+                target.Except(_exclude);
+
+            if (_connectionsIds is not null)
+                target.AndConnections(_connectionsIds);
+
+            var envelope = new EventMessage(key, data);
+
+            await _manager.Send(target, envelope, token);
         }
         finally
         {
-            _connectionIds.Clear();
-            _groups.Clear();
+            _connectionsIds?.Clear();
+            _groups?.Clear();
+            _exclude?.Clear();
             _targetAll = false;
         }
-    }
-
-    public ValueTask SendAsync<TData>(string key, TData data, CancellationToken token = default)
-        where TData : notnull
-    {
-        var envelope = new EventMessage(key, data);
-        return SendAsync(envelope, token);
     }
 }
