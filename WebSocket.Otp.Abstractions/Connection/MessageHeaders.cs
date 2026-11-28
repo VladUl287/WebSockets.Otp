@@ -1,7 +1,31 @@
 ﻿namespace WebSockets.Otp.Abstractions.Connection;
 
+public readonly record struct CorrelationId(uint Value) : ISpanFormattable, IUtf8SpanFormattable
+{
+    public static readonly CorrelationId Empty = default;
+
+    public bool IsEmpty => Value == 0;
+    public bool HasValue => Value > 0;
+
+    public static CorrelationId FromUInt32(uint value) => new(value);
+
+    public static explicit operator CorrelationId(uint value) => new(value);
+    public static implicit operator uint(CorrelationId id) => id.Value;
+
+    public override string ToString() => Value.ToString();
+
+    public string ToString(string? format, IFormatProvider? formatProvider)
+        => Value.ToString(format, formatProvider);
+
+    public bool TryFormat(Span<char> destination, out int charsWritten, ReadOnlySpan<char> format, IFormatProvider? provider)
+        => Value.TryFormat(destination, out charsWritten, format, provider);
+
+    public bool TryFormat(Span<byte> utf8Destination, out int bytesWritten, ReadOnlySpan<char> format, IFormatProvider? provider) => 
+        Value.TryFormat(utf8Destination, out bytesWritten, format, provider);
+}
+
 public readonly record struct MessageHeaders(
-    uint CorrelationId,
+    CorrelationId CorrelationId,
     ReadOnlyMemory<byte> Key,
     ReadOnlyMemory<byte> Value);
 

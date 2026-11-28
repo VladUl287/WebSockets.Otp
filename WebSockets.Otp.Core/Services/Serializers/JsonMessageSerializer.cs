@@ -96,6 +96,6 @@ public sealed class JsonMessageSerializer(JsonSerializerOptions options) : IMess
             }
         }
 
-        return new(id, key, value);
+        return new((CorrelationId)id, key, value);
     }
 }

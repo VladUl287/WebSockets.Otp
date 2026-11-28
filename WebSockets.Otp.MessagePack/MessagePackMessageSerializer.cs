@@ -76,6 +76,6 @@ public sealed class MessagePackMessageSerializer(MessagePackSerializerOptions op
         var valEnd = (int)reader.Consumed;
         var value = data[valStart..valEnd];
 
-        return new(id, key, value);
+        return new((CorrelationId)id, key, value);
     }
 }
