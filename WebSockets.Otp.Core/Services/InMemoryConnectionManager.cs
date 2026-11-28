@@ -195,9 +195,4 @@ public sealed class InMemoryConnectionManager(ObjectPool<ArrayBufferWriter<byte>
 
         //await Task.WhenAll(tasks);
     }
-
-    public ValueTask Send(WsTargets targets, WsMessage envelope, CancellationToken ct = default)
-    {
-        throw new NotImplementedException();
-    }
 }

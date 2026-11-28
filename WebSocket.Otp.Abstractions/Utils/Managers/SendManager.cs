@@ -88,15 +88,19 @@ public sealed class SendManager(IWsConnectionManager manager)
             if (!_targetAll && _connectionsIds is not { Count: > 0 } && _groups is not { Count: > 0 })
                 return;
 
-            var target = new WsTarget();
-
-            if (_exclude is not null)
-                target.Except(_exclude);
-
-            if (_connectionsIds is not null)
-                target.AndConnections(_connectionsIds);
-
             var envelope = new EventMessage(key, data);
+
+            var target = (_targetAll, _connectionsIds, _groups, _exclude) switch
+            {
+                (true, _, _, _) => 
+                    WsTarget.Broadcast(_exclude),
+                (_, { Count: 1 }, null or { Count: 0 }, null or { Count: 0 }) =>  
+                    WsTarget.ToConnection(_connectionsIds[0]),
+                (_, null or { Count: 0 }, { Count: 1 }, _) => 
+                    WsTarget.ToGroup(_groups[0], _exclude),
+                _ =>
+                    WsTarget.ToMany(_connectionsIds, _groups, _exclude)
+            };
 
             await _manager.Send(target, envelope, token);
         }
