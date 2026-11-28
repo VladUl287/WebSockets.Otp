@@ -11,4 +11,5 @@ public interface IWsConnectionManager
     ValueTask<bool> RemoveFromGroup(string group, string connectionId, CancellationToken token);
 
     ValueTask Send(WsTarget target, WsMessage envelope, CancellationToken ct = default);
+    ValueTask Send(WsTargets targets, WsMessage envelope, CancellationToken ct = default);
 }
