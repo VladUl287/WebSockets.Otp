@@ -46,14 +46,16 @@ public sealed record ResponseMessage(uint CorrelationId, object Value) : WsMessa
     public override MessageType Type => MessageType.Response;
 }
 
-public enum WsErrorCode
+public readonly record struct WsErrorCode(int Value)
 {
-    InvalidPayload,
-    UnknownRoute,
-    HandlerFailed,
-    Unauthorized,
-    RateLimited,
-    Internal
+    public static readonly WsErrorCode InvalidPayload = new(0);
+    public static readonly WsErrorCode UnknownRoute = new(1);
+    public static readonly WsErrorCode HandlerFailed = new(2);
+    public static readonly WsErrorCode Unauthorized = new(3);
+    public static readonly WsErrorCode RateLimited = new(4);
+    public static readonly WsErrorCode Internal = new(5);
+
+    public static explicit operator int(WsErrorCode errorCode) => errorCode.Value;
 }
 
 public sealed record ErrorMessage(uint CorrelationId, WsErrorCode Code, string Message) : WsMessage
