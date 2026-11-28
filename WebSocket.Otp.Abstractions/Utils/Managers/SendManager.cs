@@ -28,7 +28,7 @@ public sealed class SendManager(IWsConnectionManager manager)
         return this;
     }
 
-    public SendManager Client(IEnumerable<string> connectionsIds)
+    public SendManager Client(IReadOnlyList<string> connectionsIds)
     {
         if (_targetAll) return this;
         ConnectionsIds.AddRange(connectionsIds);
@@ -47,7 +47,7 @@ public sealed class SendManager(IWsConnectionManager manager)
         return this;
     }
 
-    public SendManager Except(IEnumerable<string> connectionsIds)
+    public SendManager Except(IReadOnlyList<string> connectionsIds)
     {
         Exclude.AddRange(connectionsIds);
         return this;
@@ -67,7 +67,7 @@ public sealed class SendManager(IWsConnectionManager manager)
         return this;
     }
 
-    public SendManager Group(IEnumerable<string> groups)
+    public SendManager Group(IReadOnlyList<string> groups)
     {
         if (_targetAll) return this;
         Groups.AddRange(groups);
