@@ -1,6 +1,7 @@
-﻿using System.Buffers;
+﻿using Microsoft.Extensions.ObjectPool;
+using System.Buffers;
 using System.Collections.Concurrent;
-using Microsoft.Extensions.ObjectPool;
+using System.Collections.Immutable;
 using WebSockets.Otp.Abstractions.Connection;
 using WebSockets.Otp.Abstractions.Utils;
 
@@ -30,169 +31,125 @@ public sealed class InMemoryConnectionManager(ObjectPool<ArrayBufferWriter<byte>
         return ValueTask.FromResult(removed);
     }
 
-    //public ValueTask Send(WsMessage envelope, SendOptions options = default, CancellationToken ct = default) =>
-    //    Send([.. _store.Values.Select(c => c.Id)], envelope, options, ct);
-
-    //public async ValueTask Send(string connectionId, WsMessage envelope, CancellationToken token)
-    //{
-    //    if (!_store.TryGetValue(connectionId, out var connection))
-    //    {
-    //        throw new ArgumentException($"Connection with id '{connectionId}' was not found.", nameof(connectionId));
-    //    }
-
-    //    var buffer = objectPool.Get();
-    //    try
-    //    {
-    //        var serializer = connection.Serializer;
-    //        serializer.SerializeMessage(envelope, buffer);
-    //        await connection.Socket.SendAsync(buffer.WrittenMemory, serializer.Type, true, token);
-    //    }
-    //    finally
-    //    {
-    //        objectPool.Return(buffer);
-    //    }
-    //}
-
-    //public async ValueTask Send(IReadOnlyList<string> connections, WsMessage envelope, SendOptions options = default, CancellationToken ct = default)
-    //{
-    //    var requested = new HashSet<string>(connections);
-
-    //    var grouped = _store.Values
-    //        .Where(c => requested.Contains(c.Id))
-    //        .GroupBy(c => c.Serializer);
-
-    //    var tasks = new List<Task>();
-
-    //    var parallelOptions = new ParallelOptions
-    //    {
-    //        MaxDegreeOfParallelism = Environment.ProcessorCount * 10,
-    //        CancellationToken = ct
-    //    };
-
-    //    foreach (var group in grouped)
-    //    {
-    //        var serializer = group.Key;
-    //        var buffer = objectPool.Get();
-    //        serializer.SerializeMessage(envelope, buffer);
-
-    //        var sends = Parallel.ForEachAsync(group, parallelOptions,
-    //            (conn, ct) => conn.Socket.SendAsync(buffer.WrittenMemory, serializer.Type, true, ct));
-
-    //        var withCleanup = RunWithCleanup(sends, objectPool, buffer);
-    //        tasks.Add(withCleanup);
-    //    }
-
-    //    await Task.WhenAll(tasks);
-    //}
-
-    //public async ValueTask SendToGroup(string group, WsMessage envelope, SendOptions options = default, CancellationToken ct = default)
-    //{
-    //    var grouped = _groups[group].Values
-    //        .GroupBy(c => c.Serializer);
-
-    //    var tasks = new List<Task>();
-
-    //    var parallelOptions = new ParallelOptions
-    //    {
-    //        MaxDegreeOfParallelism = Environment.ProcessorCount * 10,
-    //        CancellationToken = ct
-    //    };
-
-    //    foreach (var connections in grouped)
-    //    {
-    //        var serializer = connections.Key;
-    //        var buffer = objectPool.Get();
-    //        serializer.SerializeMessage(envelope, buffer);
-
-    //        var sends = Parallel.ForEachAsync(connections, parallelOptions,
-    //            (conn, ct) => conn.Socket.SendAsync(buffer.WrittenMemory, serializer.Type, true, ct));
-
-    //        var withCleanup = RunWithCleanup(sends, objectPool, buffer);
-    //        tasks.Add(withCleanup);
-    //    }
-
-    //    await Task.WhenAll(tasks);
-    //}
-
-    //public async ValueTask SendToGroup(IReadOnlyList<string> groups, WsMessage envelope, SendOptions options = default, CancellationToken ct = default)
-    //{
-    //    var requested = new HashSet<string>(groups);
-
-    //    var grouped = _groups
-    //        .Where(c => requested.Contains(c.Key))
-    //        .SelectMany(c => c.Value.Select(c => c.Value))
-    //        .GroupBy(c => c.Serializer);
-
-    //    var tasks = new List<Task>();
-
-    //    var parallelOptions = new ParallelOptions
-    //    {
-    //        MaxDegreeOfParallelism = Environment.ProcessorCount * 10,
-    //        CancellationToken = ct
-    //    };
-
-    //    foreach (var connections in grouped)
-    //    {
-    //        var serializer = connections.Key;
-    //        var buffer = objectPool.Get();
-    //        serializer.SerializeMessage(envelope, buffer);
-
-    //        var sends = Parallel.ForEachAsync(connections, parallelOptions,
-    //            (conn, ct) => conn.Socket.SendAsync(buffer.WrittenMemory, serializer.Type, true, ct));
-
-    //        var withCleanup = RunWithCleanup(sends, objectPool, buffer);
-    //        tasks.Add(withCleanup);
-    //    }
-
-    //    await Task.WhenAll(tasks);
-    //}
-
-    public ValueTask Send(WsTarget target, WsMessage envelope, CancellationToken token)
+    private static async Task RunWithCleanup(Task work, ArrayBufferWriter<byte> buffer, ObjectPool<ArrayBufferWriter<byte>> pool)
     {
-        throw new NotImplementedException();
+        try { await work; }
+        finally { pool.Return(buffer); }
+    }
 
-        static async Task RunWithCleanup(Task work, ObjectPool<ArrayBufferWriter<byte>> objectPool, ArrayBufferWriter<byte> buffer)
+    public async ValueTask Send(WsTarget target, WsMessage envelope, CancellationToken ct = default)
+    {
+        if (target.IsSingleConnection)
         {
-            try { await work; }
-            finally { objectPool.Return(buffer); }
+            await Send(target.Connection, envelope, ct);
+            return;
         }
 
-        //var requested = new HashSet<string>(destination.Connections ?? []);
+        if (target.IsSingleGroup)
+        {
+            await SendToGroup(target.Group, envelope, target.Exclude, ct);
+            return;
+        }
 
-        //foreach (var group in destination.Groups ?? [])
-        //{
-        //    if (_groups.TryGetValue(group, out var connections))
-        //        requested.RemoveWhere(connections.ContainsKey);
-        //}
+        var requested = new HashSet<string>(target.Connections);
+        foreach (var group in target.Groups)
+        {
+            if (_groups.TryGetValue(group, out var groupConnections))
+            {
+                foreach (var connectionId in groupConnections.Keys)
+                    requested.Add(connectionId);
+            }
+        }
+        if (target.Exclude is { Count: > 0 })
+        {
+            var excludeRequested = new HashSet<string>(target.Exclude);
+            requested.RemoveWhere(excludeRequested.Contains);
+        }
 
-        //var excludeRequested = new HashSet<string>(destination.Exclude ?? []);
-        //requested.RemoveWhere(excludeRequested.Contains);
+        var grouped = _store.Values
+            .Where(c => requested.Contains(c.Id))
+            .GroupBy(c => c.Serializer);
 
-        //var grouped = _store.Values
-        //    .Where(c => requested.Contains(c.Id))
-        //    .GroupBy(c => c.Serializer);
 
-        //var tasks = new List<Task>();
+        var options = new ParallelOptions
+        {
+            MaxDegreeOfParallelism = Environment.ProcessorCount * 10,
+            CancellationToken = ct
+        };
 
-        //var options = new ParallelOptions
-        //{
-        //    MaxDegreeOfParallelism = Environment.ProcessorCount * 10,
-        //    CancellationToken = token
-        //};
+        var tasks = new List<Task>();
 
-        //foreach (var connections in grouped)
-        //{
-        //    var serializer = connections.Key;
-        //    var buffer = objectPool.Get();
-        //    serializer.SerializeMessage(envelope, buffer);
+        foreach (var connections in grouped)
+        {
+            var serializer = connections.Key;
 
-        //    var sends = Parallel.ForEachAsync(connections, options,
-        //        (conn, ct) => conn.Socket.SendAsync(buffer.WrittenMemory, serializer.Type, true, ct));
+            var messageBuffer = objectPool.Get();
+            serializer.SerializeMessage(envelope, messageBuffer);
 
-        //    var withCleanup = RunWithCleanup(sends, objectPool, buffer);
-        //    tasks.Add(withCleanup);
-        //}
+            var sends = Parallel.ForEachAsync(connections, options,
+                (conn, ct) => conn.Socket.SendAsync(messageBuffer.WrittenMemory, serializer.Type, true, ct));
 
-        //await Task.WhenAll(tasks);
+            var withCleanup = RunWithCleanup(sends, messageBuffer, objectPool);
+            tasks.Add(withCleanup);
+        }
+
+        await Task.WhenAll(tasks);
+    }
+
+    private ValueTask Send(string connectionId, WsMessage envelope, CancellationToken ct = default)
+    {
+        if (!_store.TryGetValue(connectionId, out var connection))
+            throw new ArgumentException($"Connection with id '{connectionId}' was not found.", nameof(connectionId));
+
+        var messageBuffer = objectPool.Get();
+        try
+        {
+            var serializer = connection.Serializer;
+            serializer.SerializeMessage(envelope, messageBuffer);
+            return connection.Socket.SendAsync(messageBuffer.WrittenMemory, serializer.Type, true, ct);
+        }
+        finally
+        {
+            objectPool.Return(messageBuffer);
+        }
+    }
+
+    private async ValueTask SendToGroup(string group, WsMessage envelope, IReadOnlyList<string> exclude, CancellationToken ct = default)
+    {
+        if (!_groups.TryGetValue(group, out var groupMap))
+            throw new ArgumentException($"Group with name '{group}' was not found.", nameof(group));
+
+        var parallelOptions = new ParallelOptions
+        {
+            MaxDegreeOfParallelism = Environment.ProcessorCount * 10,
+            CancellationToken = ct
+        };
+
+        var groups = groupMap.Values.GroupBy(c => c.Serializer);
+        var excluded = new HashSet<string>(exclude)
+            .ToImmutableHashSet();
+        var tasks = new List<Task>();
+
+        foreach (var connections in groups)
+        {
+            var serializer = connections.Key;
+
+            var messageBuffer = objectPool.Get();
+            serializer.SerializeMessage(envelope, messageBuffer);
+
+            var sends = Parallel.ForEachAsync(connections, parallelOptions,
+                (conn, ct) =>
+                {
+                    if (excluded.Contains(conn.Id))
+                        return ValueTask.CompletedTask;
+
+                    return conn.Socket.SendAsync(messageBuffer.WrittenMemory, serializer.Type, true, ct);
+                });
+
+            var withCleanup = RunWithCleanup(sends, messageBuffer, objectPool);
+            tasks.Add(withCleanup);
+        }
+
+        await Task.WhenAll(tasks);
     }
 }
